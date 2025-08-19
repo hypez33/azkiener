@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="de" class="scroll-smooth">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kontakt – Autozentrum Kiener</title>
+  <meta name="description" content="Kontakt, Öffnungszeiten und Anfahrt." />
+  <meta name="theme-color" content="#ed804d" />
+  <link rel="preconnect" href="https://cdn.tailwindcss.com" crossorigin>
+  <link rel="dns-prefetch" href="https://images.unsplash.com">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="assets/css/style.css">
+  <meta property="og:title" content="Kontakt – Autozentrum Kiener" />
+  <meta property="og:description" content="Kontakt, Öffnungszeiten und Anfahrt." />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="https://images.unsplash.com/photo-1549921296-3ecf4a58aa89?q=80&w=1200&auto=format&fit=crop" />
+</head>
+<body class="min-h-screen bg-white text-gray-900 antialiased">
+  <a href="#main" class="skip-link">Zum Inhalt springen</a>
+  <a href="#kontakt" class="skip-link">Zur Kontaktsektion springen</a>
+  <header class="sticky top-0 z-40 border-b bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/60">
+    <div class="mx-auto max-w-7xl px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="h-10 w-10 rounded-xl bg-[#ed804d] text-white grid place-items-center font-bold">AK</div>
+        <div class="leading-tight">
+          <div class="text-lg font-semibold">Autozentrum Kiener</div>
+          <div class="text-xs text-gray-500">Der Gebrauchtwagen-Spezialist in Ladenburg</div>
+        </div>
+      </div>
+      <nav class="hidden md:flex items-center gap-6 text-sm" aria-label="Hauptnavigation">
+        <a class="nav-link" href="index.html#fahrzeuge">Fahrzeuge</a>
+        <a class="nav-link" href="index.html#services">Service</a>
+        <a class="nav-link" href="index.html#finanzierung">Finanzierung</a>
+        <a class="nav-link" href="index.html#ueber">Über uns</a>
+        <a class="btn-outline" href="kontakt.html">Kontakt</a>
+        <button id="themeToggle" class="btn-icon" aria-pressed="false" aria-label="Dark Mode umschalten"><span id="themeIcon">🌙</span></button>
+      </nav>
+      <button class="md:hidden btn-outline" aria-label="Menü öffnen" aria-controls="mobileMenu" aria-expanded="false" id="mobileMenuBtn">Menü</button>
+    </div>
+    <div id="mobileMenu" class="md:hidden hidden border-t bg-white" role="dialog" aria-modal="true">
+      <nav class="mx-auto max-w-7xl px-4 py-3 grid gap-3 text-sm" aria-label="Mobile Navigation">
+        <a class="py-1" href="index.html#fahrzeuge">Fahrzeuge</a>
+        <a class="py-1" href="index.html#services">Service</a>
+        <a class="py-1" href="index.html#finanzierung">Finanzierung</a>
+        <a class="py-1" href="index.html#ueber">Über uns</a>
+        <a class="py-1 font-medium" href="kontakt.html">Kontakt</a>
+        <button id="themeToggleMobile" class="btn-outline mt-2" aria-pressed="false">Dark Mode</button>
+      </nav>
+    </div>
+  </header>
+
+<main id="main">
+  <section id="kontakt" class="mx-auto max-w-7xl px-4 py-12 sm:py-16 reveal">
+    <div class="grid lg:grid-cols-2 gap-8">
+      <div>
+        <h1 class="text-2xl sm:text-3xl font-semibold">Kontakt &amp; Öffnungszeiten</h1>
+        <div class="mt-4 grid gap-3 text-sm">
+          <div class="flex items-center gap-3"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" class="text-[#ed804d]"><path d="M22 16.92V21a1 1 0 0 1-1.09 1 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 3 3.09 1 1 0 0 1 4 2h4.09a1 1 0 0 1 1 .75L10.91 6a1 1 0 0 1-.27 1L9 8.59a16 16 0 0 0 6.42 6.42l1.6-1.6a1 1 0 0 1 1-.27l3.25.82a1 1 0 0 1 .73 1V16.92z"/></svg>
+            <span class="font-medium w-28">Telefon</span><a class="link" href="tel:+4962039302450">06203 - 9 30 24 50</a></div>
+          <div class="flex items-center gap-3"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" class="text-[#ed804d]"><path d="M22 16.92V21a1 1 0 0 1-1.09 1 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6"/></svg>
+            <span class="font-medium w-28">Mobil</span><a class="link" href="tel:+4915174509328">0151 - 74 50 93 28</a></div>
+          <div class="flex items-center gap-3"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" class="text-[#ed804d]"><path d="M4 4h16v16H4z"/><path d="M22 6l-10 7L2 6"/></svg>
+            <span class="font-medium w-28">E-Mail</span><a class="link" href="mailto:kontakt@azkiener.de">kontakt@azkiener.de</a></div>
+          <div class="flex items-center gap-3"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" class="text-[#ed804d]"><path d="M12 2C8 2 5 5 5 9c0 7 7 13 7 13s7-6 7-13c0-4-3-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>
+            <span class="font-medium w-28">Adresse</span><span>Wallstadter Straße 49/1, 68526 Ladenburg</span></div>
+          <div class="flex items-center gap-3"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" class="text-[#ed804d]"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+            <span class="font-medium w-28">Öffnungszeiten</span><span>Mo–Fr 09–18 Uhr · Sa 09–13 Uhr</span></div>
+        </div>
+
+        <form id="contactForm" class="mt-6 grid gap-3" novalidate>
+          <h2 class="text-lg font-medium">Nachricht senden</h2>
+          <div class="grid sm:grid-cols-2 gap-3">
+            <div><label class="label" for="name">Name</label><input class="input" id="name" name="name" required><p class="helper" data-for="name"></p></div>
+            <div><label class="label" for="phone">Telefon</label><input class="input" id="phone" name="phone"><p class="helper" data-for="phone"></p></div>
+          </div>
+          <div><label class="label" for="email">E-Mail</label><input class="input" id="email" name="email" type="email" required><p class="helper" data-for="email"></p></div>
+          <div><label class="label" for="message">Ihre Nachricht</label><textarea class="input" id="message" name="message" rows="5" required></textarea><p class="helper" data-for="message"></p></div>
+          <div class="flex items-center gap-2"><input id="privacy" type="checkbox" class="checkbox" required><label for="privacy" class="text-sm">Ich akzeptiere die <a class="link" href="datenschutz.html" target="_blank">Datenschutzerklärung</a>.</label></div>
+          <button class="btn-primary w-fit">Absenden</button>
+          <p id="formStatus" class="text-sm mt-1" role="status" aria-live="polite"></p>
+        </form>
+      </div>
+
+      <div class="rounded-2xl overflow-hidden border bg-gray-100 h-[420px]">
+        <iframe title="Standort" class="w-full h-[420px]" loading="lazy" src="https://www.openstreetmap.org/export/embed.html?bbox=8.587%2C49.466%2C8.639%2C49.504&layer=mapnik&marker=49.478%2C8.612"></iframe>
+      </div>
+    </div>
+  </section>
+</main>
+
+  <footer class="border-t">
+    <div class="mx-auto max-w-7xl px-4 py-10 text-sm text-gray-600 grid sm:grid-cols-2 lg:grid-cols-4 gap-8">
+      <div><div class="font-medium text-gray-900">Autozentrum Kiener</div>
+        <p class="mt-2">Ihr Partner für Gebrauchtwagen, Service &amp; Finanzierung in Ladenburg.</p></div>
+      <div><div class="font-medium text-gray-900">Rechtliches</div>
+        <ul class="mt-2 space-y-2">
+          <li><a href="impressum.html" class="hover:underline">Impressum</a></li>
+          <li><a href="datenschutz.html" class="hover:underline">Datenschutz</a></li>
+          <li><button id="cookieSettingsBtn" class="link">Cookie-Einstellungen</button></li>
+        </ul></div>
+      <div><div class="font-medium text-gray-900">Kontakt</div>
+        <ul class="mt-2 space-y-2">
+          <li><a href="tel:+4962039302450" class="hover:underline">06203 - 9 30 24 50</a></li>
+          <li><a href="tel:+4915174509328" class="hover:underline">0151 - 74 50 93 28</a></li>
+          <li><a href="mailto:kontakt@azkiener.de" class="hover:underline">kontakt@azkiener.de</a></li>
+          <li>Wallstadter Straße 49/1 · 68526 Ladenburg</li>
+        </ul></div>
+      <div><div class="font-medium text-gray-900">Newsletter</div>
+        <form id="newsletterForm" class="mt-2 flex gap-2" novalidate>
+          <input type="email" required placeholder="Ihre E-Mail" class="input" id="newsletterEmail" aria-label="Newsletter E-Mail">
+          <button class="btn-primary">Anmelden</button>
+        </form>
+        <p id="newsletterStatus" class="text-xs mt-2" role="status" aria-live="polite"></p></div>
+    </div>
+    <div class="text-center text-xs text-gray-500 pb-16">© <span id="year"></span> F.A.M. Autohaus Kiener GmbH &amp; Co. KG</div>
+  </footer>
+
+  <button id="backToTop" class="back-to-top" aria-label="Nach oben">↑</button>
+  <div id="cookieBanner" class="cookie-banner" role="dialog" aria-live="polite" aria-label="Cookie Hinweis">
+    <div class="container">
+      <p>Wir verwenden Cookies für grundlegende Funktionen (z. B. Dark-Mode-Speicherung). <a href="datenschutz.html#cookies" class="link">Mehr erfahren</a></p>
+      <div class="actions">
+        <button id="cookieAcceptAll" class="btn-primary">Alle akzeptieren</button>
+        <button id="cookieReject" class="btn-outline">Nur notwendige</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="assets/js/main.js" defer></script>
+
+  <!-- Cookie-Consent: Beispiel für blockierte Scripts
+       <script type="text/plain" data-consent="analytics" data-src="https://cdn.example.com/analytics.js"></script>
+       <script type="text/plain" data-consent="marketing">console.log('ads');</script>
+  -->
+
+</body>
+</html>

@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="de" class="scroll-smooth">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Datenschutz – Autozentrum Kiener</title>
+  <meta name="description" content="Datenschutzhinweise gemäß DSGVO." />
+  <meta name="theme-color" content="#ed804d" />
+  <link rel="preconnect" href="https://cdn.tailwindcss.com" crossorigin>
+  <link rel="dns-prefetch" href="https://images.unsplash.com">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="assets/css/style.css">
+  <meta property="og:title" content="Datenschutz – Autozentrum Kiener" />
+  <meta property="og:description" content="Datenschutzhinweise gemäß DSGVO." />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="https://images.unsplash.com/photo-1549921296-3ecf4a58aa89?q=80&w=1200&auto=format&fit=crop" />
+</head>
+<body class="min-h-screen bg-white text-gray-900 antialiased">
+  <a href="#main" class="skip-link">Zum Inhalt springen</a>
+  <a href="#kontakt" class="skip-link">Zur Kontaktsektion springen</a>
+  <header class="sticky top-0 z-40 border-b bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/60">
+    <div class="mx-auto max-w-7xl px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="h-10 w-10 rounded-xl bg-[#ed804d] text-white grid place-items-center font-bold">AK</div>
+        <div class="leading-tight">
+          <div class="text-lg font-semibold">Autozentrum Kiener</div>
+          <div class="text-xs text-gray-500">Der Gebrauchtwagen-Spezialist in Ladenburg</div>
+        </div>
+      </div>
+      <nav class="hidden md:flex items-center gap-6 text-sm" aria-label="Hauptnavigation">
+        <a class="nav-link" href="index.html#fahrzeuge">Fahrzeuge</a>
+        <a class="nav-link" href="index.html#services">Service</a>
+        <a class="nav-link" href="index.html#finanzierung">Finanzierung</a>
+        <a class="nav-link" href="index.html#ueber">Über uns</a>
+        <a class="btn-outline" href="kontakt.html">Kontakt</a>
+        <button id="themeToggle" class="btn-icon" aria-pressed="false" aria-label="Dark Mode umschalten"><span id="themeIcon">🌙</span></button>
+      </nav>
+      <button class="md:hidden btn-outline" aria-label="Menü öffnen" aria-controls="mobileMenu" aria-expanded="false" id="mobileMenuBtn">Menü</button>
+    </div>
+    <div id="mobileMenu" class="md:hidden hidden border-t bg-white" role="dialog" aria-modal="true">
+      <nav class="mx-auto max-w-7xl px-4 py-3 grid gap-3 text-sm" aria-label="Mobile Navigation">
+        <a class="py-1" href="index.html#fahrzeuge">Fahrzeuge</a>
+        <a class="py-1" href="index.html#services">Service</a>
+        <a class="py-1" href="index.html#finanzierung">Finanzierung</a>
+        <a class="py-1" href="index.html#ueber">Über uns</a>
+        <a class="py-1 font-medium" href="kontakt.html">Kontakt</a>
+        <button id="themeToggleMobile" class="btn-outline mt-2" aria-pressed="false">Dark Mode</button>
+      </nav>
+    </div>
+  </header>
+<main id="main">
+
+    <section class="mx-auto max-w-7xl px-4 py-12 sm:py-16">
+      <h1 class="text-2xl sm:text-3xl font-semibold">Datenschutzerklärung</h1>
+      <div class="prose mt-6 max-w-none">
+        <h2>1. Verantwortlicher</h2>
+        <p>F.A.M. Autohaus Kiener GmbH &amp; Co. KG, Wallstadter Straße 49/1, 68526 Ladenburg ·
+        E-Mail: <a href="mailto:kontakt@azkiener.de">kontakt@azkiener.de</a> · Tel: 06203 - 9 30 24 50</p>
+        <h2 id="cookies">2. Cookies</h2>
+        <p>Technisch notwendige Cookies (z. B. Dark-Mode) sowie optionale Präferenz/Analyse-Cookies. Änderung über „Cookie-Einstellungen“ im Footer.</p>
+        <h2>3. Kontaktformular</h2>
+        <p>Verarbeitung zur Bearbeitung Ihrer Anfrage (Art. 6 Abs. 1 lit. b/f DSGVO), Löschung nach Zweckfortfall.</p>
+        <h2>4. Newsletter</h2>
+        <p>Verarbeitung Ihrer E-Mail auf Basis Einwilligung (Art. 6 Abs. 1 lit. a DSGVO), Widerruf jederzeit möglich.</p>
+        <h2>5. Eingebettete Inhalte</h2>
+        <p>OpenStreetMap auf der Kontaktseite. Beim Aufruf werden personenbezogene Daten an den Anbieter übertragen.</p>
+        <h2>6. Ihre Rechte</h2>
+        <p>Auskunft, Berichtigung, Löschung, Einschränkung, Übertragbarkeit, Widerspruch. Stand: 2025-08-18</p>
+      </div>
+    </section>
+    
+</main>
+  <footer class="border-t">
+    <div class="mx-auto max-w-7xl px-4 py-10 text-sm text-gray-600 grid sm:grid-cols-2 lg:grid-cols-4 gap-8">
+      <div><div class="font-medium text-gray-900">Autozentrum Kiener</div>
+        <p class="mt-2">Ihr Partner für Gebrauchtwagen, Service &amp; Finanzierung in Ladenburg.</p></div>
+      <div><div class="font-medium text-gray-900">Rechtliches</div>
+        <ul class="mt-2 space-y-2">
+          <li><a href="impressum.html" class="hover:underline">Impressum</a></li>
+          <li><a href="datenschutz.html" class="hover:underline">Datenschutz</a></li>
+          <li><button id="cookieSettingsBtn" class="link">Cookie-Einstellungen</button></li>
+        </ul></div>
+      <div><div class="font-medium text-gray-900">Kontakt</div>
+        <ul class="mt-2 space-y-2">
+          <li><a href="tel:+4962039302450" class="hover:underline">06203 - 9 30 24 50</a></li>
+          <li><a href="tel:+4915174509328" class="hover:underline">0151 - 74 50 93 28</a></li>
+          <li><a href="mailto:kontakt@azkiener.de" class="hover:underline">kontakt@azkiener.de</a></li>
+          <li>Wallstadter Straße 49/1 · 68526 Ladenburg</li>
+        </ul></div>
+      <div><div class="font-medium text-gray-900">Newsletter</div>
+        <form id="newsletterForm" class="mt-2 flex gap-2" novalidate>
+          <input type="email" required placeholder="Ihre E-Mail" class="input" id="newsletterEmail" aria-label="Newsletter E-Mail">
+          <button class="btn-primary">Anmelden</button>
+        </form>
+        <p id="newsletterStatus" class="text-xs mt-2" role="status" aria-live="polite"></p></div>
+    </div>
+    <div class="text-center text-xs text-gray-500 pb-16">© <span id="year"></span> F.A.M. Autohaus Kiener GmbH &amp; Co. KG</div>
+  </footer>
+  <button id="backToTop" class="back-to-top" aria-label="Nach oben">↑</button>
+  <div id="cookieBanner" class="cookie-banner" role="dialog" aria-live="polite" aria-label="Cookie Hinweis">
+    <div class="container">
+      <p>Wir verwenden Cookies für grundlegende Funktionen (z. B. Dark-Mode-Speicherung). <a href="datenschutz.html#cookies" class="link">Mehr erfahren</a></p>
+      <div class="actions">
+        <button id="cookieAcceptAll" class="btn-primary">Alle akzeptieren</button>
+        <button id="cookieReject" class="btn-outline">Nur notwendige</button>
+      </div>
+    </div>
+  </div>
+<script src="assets/js/main.js" defer></script>
+
+  <!-- Cookie-Consent: Beispiel für blockierte Scripts
+       <script type="text/plain" data-consent="analytics" data-src="https://cdn.example.com/analytics.js"></script>
+       <script type="text/plain" data-consent="marketing">console.log('ads');</script>
+  -->
+
+</body>
+</html>

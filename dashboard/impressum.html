@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="de" class="scroll-smooth">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Impressum – Autozentrum Kiener</title>
+  <meta name="description" content="Gesetzliche Anbieterkennzeichnung." />
+  <meta name="theme-color" content="#D96734" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body class="bg-gray-50 text-gray-900 antialiased dark:bg-gray-900 dark:text-gray-100">
+  <a href="#main" class="skip-link">Zum Inhalt springen</a>
+  
+  <header class="sticky top-0 z-40 border-b border-gray-200 dark:border-gray-800 bg-white/80 dark:bg-gray-900/80 backdrop-blur">
+    <div class="mx-auto max-w-7xl px-4 py-3 flex items-center justify-between">
+      <a href="index.html" class="flex items-center gap-3" title="Zur Startseite">
+        <div class="h-10 w-10 rounded-xl bg-brand-600 text-white grid place-items-center font-bold">AK</div>
+        <div class="leading-tight">
+          <div class="text-lg font-semibold">Autozentrum Kiener</div>
+          <div class="text-xs text-gray-500 dark:text-gray-400">Der Gebrauchtwagen-Spezialist in Ladenburg</div>
+        </div>
+      </a>
+      <nav class="hidden md:flex items-center gap-2 text-sm" aria-label="Hauptnavigation">
+        <a class="nav-link" href="index.html#fahrzeuge">Fahrzeuge</a>
+        <a class="nav-link" href="index.html#services">Service</a>
+        <a class="nav-link" href="index.html#finanzierung">Finanzierung</a>
+        <a class="nav-link" href="index.html#ueber">Über uns</a>
+        <a class="btn-outline ml-2" href="kontakt.html">Kontakt</a>
+        <button id="themeToggle" class="btn-icon" aria-pressed="false" aria-label="Dark Mode umschalten"><span id="themeIcon"></span></button>
+      </nav>
+      <button class="md:hidden btn-icon" aria-label="Menü öffnen" aria-controls="mobileMenu" aria-expanded="false" id="mobileMenuBtn">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7" /></svg>
+      </button>
+    </div>
+    <div id="mobileMenu" class="md:hidden hidden border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900" role="dialog" aria-modal="true">
+      <nav class="mx-auto max-w-7xl px-4 py-4 grid gap-3 text-base" aria-label="Mobile Navigation">
+        <a class="py-2" href="index.html#fahrzeuge">Fahrzeuge</a>
+        <a class="py-2" href="index.html#services">Service</a>
+        <a class="py-2" href="index.html#finanzierung">Finanzierung</a>
+        <a class="py-2" href="index.html#ueber">Über uns</a>
+        <a class="py-2 font-medium" href="kontakt.html">Kontakt</a>
+        <button id="themeToggleMobile" class="btn-outline mt-2 w-full">Dark Mode</button>
+      </nav>
+    </div>
+  </header>
+
+<main id="main">
+    <section class="mx-auto max-w-4xl px-4 py-16 sm:py-24">
+      <h1 class="text-3xl sm:text-4xl font-bold tracking-tight">Impressum</h1>
+      <div class="prose dark:prose-invert mt-8 max-w-none">
+        <div class="p-4 rounded-lg bg-red-50 border border-red-200 text-red-800 dark:bg-red-900/20 dark:border-red-500/30 dark:text-red-200">
+          <strong class="font-medium">Wichtiger Hinweis:</strong> Bitte füllen Sie die unten stehenden Felder mit Ihren korrekten Unternehmensdaten aus, um die gesetzliche Impressumspflicht zu erfüllen.
+        </div>
+
+        <h2 class="!mt-8">Anbieter</h2>
+        <p><strong>F.A.M. Autohaus Kiener GmbH & Co. KG</strong><br>
+        Wallstadter Straße 49/1<br>
+        68526 Ladenburg<br>
+        Deutschland</p>
+        
+        <h2>Kontakt</h2>
+        <p>Telefon: <a href="tel:062039302450">06203 - 9 30 24 50</a><br>
+        Mobil: <a href="tel:015174509328">0151 - 74 50 93 28</a><br>
+        E-Mail: <a href="mailto:kontakt@azkiener.de">kontakt@azkiener.de</a></p>
+        
+        <h2>Vertretungsberechtigte</h2>
+        <p class="font-medium text-red-600 dark:text-red-400">[Name des Geschäftsführers / Vertretungsberechtigten einfügen]</p>
+        
+        <h2>Registereintrag</h2>
+        <p class="font-medium text-red-600 dark:text-red-400">Registergericht: [Amtsgericht einfügen]<br>
+        Registernummer: [HRB/HRA-Nummer einfügen]</p>
+        
+        <h2>Umsatzsteuer-ID</h2>
+        <p>Umsatzsteuer-Identifikationsnummer gemäß §27a UStG:<br>
+        <span class="font-medium text-red-600 dark:text-red-400">[Ihre USt-IdNr. einfügen]</span></p>
+        
+        <h2>Verbraucherstreitbeilegung (VSBG)</h2>
+        <p>Wir sind nicht bereit oder verpflichtet, an Streitbeilegungsverfahren vor einer Verbraucherschlichtungsstelle teilzunehmen.</p>
+      </div>
+    </section>
+</main>
+
+  <footer class="border-t border-gray-200 dark:border-gray-800">
+    <div class="mx-auto max-w-7xl px-4 py-12 text-sm text-gray-600 dark:text-gray-400 grid sm:grid-cols-2 lg:grid-cols-4 gap-8">
+        <div>
+            <div class="font-semibold text-gray-900 dark:text-white">Autozentrum Kiener</div>
+            <p class="mt-2">Ihr Partner für Gebrauchtwagen, Service & Finanzierung in Ladenburg.</p>
+        </div>
+        <div>
+            <div class="font-semibold text-gray-900 dark:text-white">Rechtliches</div>
+            <ul class="mt-2 space-y-2">
+                <li><a href="impressum.html" class="footer-link">Impressum</a></li>
+                <li><a href="datenschutz.html" class="footer-link">Datenschutz</a></li>
+                <li><button id="cookieSettingsBtn" class="link">Cookie-Einstellungen</button></li>
+            </ul>
+        </div>
+        <div>
+            <div class="font-semibold text-gray-900 dark:text-white">Kontakt</div>
+            <ul class="mt-2 space-y-2">
+                <li><a href="tel:+4962039302450" class="footer-link">06203 - 9 30 24 50</a></li>
+                <li><a href="mailto:kontakt@azkiener.de" class="footer-link">kontakt@azkiener.de</a></li>
+                <li class="pt-1">Wallstadter Straße 49/1<br>68526 Ladenburg</li>
+            </ul>
+        </div>
+        <div>
+            <div class="font-semibold text-gray-900 dark:text-white">Newsletter</div>
+            <form id="newsletterForm" class="mt-2 flex gap-2" novalidate>
+                <input type="email" required placeholder="Ihre E-Mail" class="input" id="newsletterEmail" aria-label="Newsletter E-Mail">
+                <button class="btn-primary flex-shrink-0">Senden</button>
+            </form>
+            <p id="newsletterStatus" class="text-xs mt-2" role="status" aria-live="polite"></p>
+        </div>
+    </div>
+    <div class="text-center text-xs text-gray-500 py-6 border-t border-gray-200 dark:border-gray-800">
+        © <span id="year"></span> F.A.M. Autohaus Kiener GmbH & Co. KG
+    </div>
+  </footer>
+
+  <button id="backToTop" class="back-to-top" aria-label="Nach oben">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.707l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13a1 1 0 102 0V9.414l1.293 1.293a1 1 0 001.414-1.414z" clip-rule="evenodd" /></svg>
+  </button>
+  
+  <div id="cookieBanner" class="cookie-banner" role="dialog" aria-live="polite" aria-label="Cookie Hinweis">
+    <div class="container">
+      <p>Wir verwenden Cookies, um die Funktionalität der Website zu gewährleisten (z. B. für den Dark Mode). <a href="datenschutz.html#cookies" class="link">Mehr erfahren</a></p>
+      <div class="actions">
+        <button id="cookieAcceptAll" class="btn-primary">Alle akzeptieren</button>
+        <button id="cookieReject" class="btn-outline">Nur notwendige</button>
+      </div>
+    </div>
+  </div>
+
+<script src="assets/js/main.js" defer></script>
+
+  <!-- Cookie-Consent: Beispiel für blockierte Scripts
+       <script type="text/plain" data-consent="analytics" data-src="https://cdn.example.com/analytics.js"></script>
+       <script type="text/plain" data-consent="marketing">console.log('ads');</script>
+  -->
+
+</body>
+</html>
