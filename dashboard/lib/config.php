@@ -1,29 +1,35 @@
 <?php
-// lib/config.php — Konfiguration
+// dashboard/lib/config.php
+// Reads credentials from Environment Variables.
+// TEMPORARY FALLBACKS are included because your Vercel runtime isn't seeing the env vars yet.
+// Replace/remove the hardcoded fallbacks once env vars are confirmed working.
 
-return [
-    // >> TRAGE HIER EURE ZUGANGSDATEN EIN <<
-    'MOBILE_USER'        => 'dlr_andrekiener',
-    'MOBILE_PASSWORD'    => 'T7zaurBoCaXZ',
-    'CUSTOMER_NUMBERS'   => '752427',      // mehrere per Komma möglich
+// Helper: clean string or null
+function env_or_null($key) {
+    $v = getenv($key);
+    if ($v === false || $v === '') return null;
+    return trim($v);
+}
 
-    // Caching / Verhalten
-    'CACHE_TTL_SECONDS'  => 10 * 60,       // 10 Minuten
-    'DETAIL_ENRICH'      => true,          // Bilder via Detail-Abruf laden
-    'DETAIL_LIMIT'       => 200,           // max. Detail-Calls pro Refresh (Schutz)
-    'HTTP_TIMEOUT'       => 25,            // Sekunden Timeout je Request
-
-    // Basis
-    'BASE_URL'           => 'https://services.mobile.de/search-api/search',
-    'DETAIL_URL'         => 'https://services.mobile.de/search-api/ad/{adKey}',
-    'ACCEPT'             => 'application/vnd.de.mobile.api+json',
-
-    // Pfade
-    'ROOT'               => dirname(__DIR__),
-    'STORAGE'            => dirname(__DIR__, 1) . '/../storage',
-    'CACHE_FILE'         => dirname(__DIR__, 1) . '/../storage/cache.json',
-    'IMG_CACHE_DIR'      => dirname(__DIR__, 1) . '/../storage/img',
-
-    // Proxy
-    'PROXY_IMAGES'       => true,          // /img?u=… im Frontend verwenden
+$CONFIG = [
+    'MOBILE_USER'      => env_or_null('MOBILE_USER')      ?: 'dlr_andrekiener', // Fallback (remove later)
+    'MOBILE_PASSWORD'  => env_or_null('MOBILE_PASSWORD')  ?: 'T7zaurBoCaXZ',    // Fallback (remove later)
+    'CUSTOMER_NUMBERS' => env_or_null('CUSTOMER_NUMBERS') ?: '752427',          // Fallback (remove later)
 ];
+
+// Storage/Caching path (ephemeral on Vercel)
+$isReadonlyFs = !!getenv('VERCEL') || !!getenv('NOW_REGION');
+$tmp = sys_get_temp_dir();
+$storageBase = $isReadonlyFs && $tmp ? $tmp . DIRECTORY_SEPARATOR . 'azkiener' : __DIR__ . '/../storage';
+
+$CONFIG['CACHE_FILE']    = $storageBase . DIRECTORY_SEPARATOR . 'vehicles.json';
+$CONFIG['IMG_CACHE_DIR'] = $storageBase . DIRECTORY_SEPARATOR . 'img';
+
+if (!file_exists($storageBase)) { @mkdir($storageBase, 0777, true); }
+if (!file_exists($CONFIG['IMG_CACHE_DIR'])) { @mkdir($CONFIG['IMG_CACHE_DIR'], 0777, true); }
+
+// Convenience accessors
+function cfg($key, $default=null) {
+    global $CONFIG;
+    return array_key_exists($key, $CONFIG) ? $CONFIG[$key] : $default;
+}
