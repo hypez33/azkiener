@@ -240,20 +240,55 @@ function restoreFilters(){
   $("#sortSelect")&&(document.getElementById("sortSelect").value=o);
 }
 
+
 /* Laden */
 document.addEventListener("DOMContentLoaded",()=>{
   revealify(); // initial
   if(!grid) return;
   restoreFilters();
-  fetch("api/vehicles.php")
-    .then(r=>r.json())
-    .then(j=>{
-      const list = Array.isArray(j) ? j : (j?.vehicles || j?.items || []);
+
+  const API_VEHICLES = "api/vehicles.php?limit=60";
+  const API_REFRESH  = "api/refresh.php?limit=60";
+
+  function pickList(j){
+    if(!j) return [];
+    if (Array.isArray(j)) return j;
+    if (Array.isArray(j.data) && 'ts' in j) return j.data; // legacy {ts,data}
+    if (j.status === 'ok' && Array.isArray(j.data)) return j.data; // generic {status,data}
+    if (Array.isArray(j.vehicles)) return j.vehicles;
+    if (Array.isArray(j.items)) return j.items;
+    return [];
+  }
+
+  async function fetchJSON(url){
+    const res = await fetch(url, { cache: 'no-store' });
+    const text = await res.text();
+    try {
+      return JSON.parse(text);
+    } catch(e){
+      console.error("JSON parse failed for", url, " → raw response:", text);
+      throw e;
+    }
+  }
+
+  (async ()=>{
+    try{
+      let payload = await fetchJSON(API_VEHICLES);
+      let list = pickList(payload);
+      if(!list.length){
+        console.warn("vehicles.php returned 0 items → trying refresh.php");
+        payload = await fetchJSON(API_REFRESH);
+        list = pickList(payload);
+      }
       allVehicles = list.map(toVehicle);
       render(true);
-    })
-    .catch(()=>{ grid.innerHTML='<div class="text-sm text-gray-600">Fehler beim Laden der Fahrzeuge.</div>'; });
+    }catch(err){
+      console.error("Load failed:", err);
+      grid.innerHTML='<div class="text-sm text-gray-600">Fehler beim Laden der Fahrzeuge.</div>';
+    }
+  })();
 });
+
 
 /* Mehr laden */
 loadMoreBtn&&loadMoreBtn.addEventListener("click",()=>{ render(false); });
