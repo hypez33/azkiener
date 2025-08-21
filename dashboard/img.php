@@ -1,48 +1,77 @@
 <?php
-require __DIR__ . '/lib/utils.php';
+// dashboard/img.php
+// Lightweight image proxy with ephemeral caching for Vercel.
+// Usage: /img.php?src=<url-encoded-absolute-url>&ttl=3600
+// Optional: &referer=<referer-header>, &ua=<user-agent>
+// NOTE: No resizing server-side (GD/Imagick may not be available in serverless).
 
-ensure_storage();
-$c = cfg();
+declare(strict_types=1);
+header_remove('X-Powered-By');
 
-$u = $_GET['u'] ?? '';
-if (!$u || !preg_match('~^https?://~i', $u)) {
-    http_response_code(400); echo 'invalid url'; exit;
+// Validate & normalize input
+$src = isset($_GET['src']) ? trim((string)$_GET['src']) : '';
+if ($src === '' || !preg_match('~^https?://~i', $src)) {
+  http_response_code(400);
+  header('Content-Type: application/json; charset=utf-8');
+  echo json_encode(['error' => 'Missing or invalid src URL']);
+  exit;
 }
 
-$hash = sha1($u);
-$path = $c['IMG_CACHE_DIR'] . '/' . $hash . '.bin';
-$ctypePath = $c['IMG_CACHE_DIR'] . '/' . $hash . '.type';
+$ttl = isset($_GET['ttl']) ? max(60, (int)$_GET['ttl']) : 3600; // default 1h
+$cacheDir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'azkiener_img';
+if (!is_dir($cacheDir)) { @mkdir($cacheDir, 0777, true); }
+$cacheKey = md5($src);
+$cachePath = $cacheDir . DIRECTORY_SEPARATOR . $cacheKey;
 
-if (file_exists($path) && file_exists($ctypePath)) {
-    $ctype = trim(@file_get_contents($ctypePath)) ?: 'image/jpeg';
-    header('Content-Type: '.$ctype);
-    header('Cache-Control: public, max-age=86400');
-    readfile($path);
+// Serve from cache if fresh
+if (file_exists($cachePath)) {
+  $age = time() - filemtime($cachePath);
+  if ($age <= $ttl) {
+    // Read headers file if present
+    $meta = @json_decode(@file_get_contents($cachePath . '.json'), true);
+    if (isset($meta['content_type'])) {
+      header('Content-Type: ' . $meta['content_type']);
+    } else {
+      header('Content-Type: image/jpeg'); // fallback
+    }
+    header('Cache-Control: public, max-age=300, s-maxage=600, stale-while-revalidate=1200');
+    readfile($cachePath);
     exit;
+  }
 }
 
-$ch = curl_init($u);
+// Fetch upstream
+$ch = curl_init();
+$headers = ['Accept: image/*,*/*;q=0.8'];
+if (isset($_GET['referer'])) $headers[] = 'Referer: ' . $_GET['referer'];
+$ua = isset($_GET['ua']) ? (string)$_GET['ua'] : 'azkiener-img-proxy/1.0';
 curl_setopt_array($ch, [
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_FOLLOWLOCATION => true,
-    CURLOPT_CONNECTTIMEOUT => $c['HTTP_TIMEOUT'],
-    CURLOPT_TIMEOUT        => $c['HTTP_TIMEOUT'],
-    CURLOPT_USERAGENT      => 'ak-mobile-img-proxy/1.0',
+  CURLOPT_URL => $src,
+  CURLOPT_RETURNTRANSFER => true,
+  CURLOPT_FOLLOWLOCATION => true,
+  CURLOPT_MAXREDIRS => 4,
+  CURLOPT_TIMEOUT => 15,
+  CURLOPT_HTTPHEADER => $headers,
+  CURLOPT_USERAGENT => $ua,
 ]);
 $body = curl_exec($ch);
-$code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-$ctype = curl_getinfo($ch, CURLINFO_CONTENT_TYPE) ?: 'image/jpeg';
+$err  = curl_error($ch);
+$code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+$contentType = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
 curl_close($ch);
 
-if ($code >= 400 || $body === false || strlen($body) === 0) {
-    http_response_code(502);
-    echo 'upstream error';
-    exit;
+if ($err || $code >= 400 || !$body) {
+  http_response_code(502);
+  header('Content-Type: application/json; charset=utf-8');
+  echo json_encode(['error' => 'Upstream fetch failed', 'code' => $code, 'detail' => $err]);
+  exit;
 }
 
-@file_put_contents($path, $body);
-@file_put_contents($ctypePath, $ctype);
+// Persist to cache (best-effort)
+@file_put_contents($cachePath, $body, LOCK_EX);
+@file_put_contents($cachePath . '.json', json_encode(['content_type' => $contentType ?: 'image/jpeg']), LOCK_EX);
 
-header('Content-Type: '.$ctype);
-header('Cache-Control: public, max-age=86400');
+// Serve
+header('Content-Type: ' . ($contentType ?: 'image/jpeg'));
+header('Cache-Control: public, max-age=300, s-maxage=600, stale-while-revalidate=1200');
 echo $body;
