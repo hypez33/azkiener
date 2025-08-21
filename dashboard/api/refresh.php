@@ -1,11 +1,11 @@
-
 <?php
-// Forces refresh by calling vehicles with ?force=1
+declare(strict_types=1);
+
+// IMPORTANT: Save without BOM and no whitespace before <?php.
+
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
-$qs = $_SERVER['QUERY_STRING'] ?? '';
-$sep = $qs ? '&' : '';
-$url = '/api/vehicles.php' . ($qs ? ('?' . $qs . $sep . 'force=1') : '?force=1');
-// Simple internal redirect
-$_SERVER['REQUEST_URI'] = $url;
-include __DIR__ . '/vehicles.php';
+
+// Internally call vehicles with force=1 without emitting any output before headers.
+$_GET['force'] = '1';
+require __DIR__ . '/vehicles.php';
