@@ -1,6 +1,5 @@
 <?php
 declare(strict_types=1);
-header_remove(); // ensure no stale headers
 $src = $_GET['src'] ?? ($_GET['u'] ?? '');
 if (!$src) {
     header('Content-Type: application/json; charset=utf-8');
@@ -15,7 +14,6 @@ if (!$parsed || !in_array(strtolower($parsed['scheme'] ?? ''), ['http','https'],
     echo json_encode(["error"=>"invalid url"]);
     exit;
 }
-// Basic cache
 $dir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'azkiener_img';
 if (!file_exists($dir)) { @mkdir($dir, 0777, true); }
 $cache = $dir . DIRECTORY_SEPARATOR . md5($src);

@@ -3,7 +3,6 @@ declare(strict_types=1);
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: s-maxage=30, stale-while-revalidate=120');
 
-// ------- Helpers -------
 function cache_dir(): string {
     $d = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'azkiener_cache';
     if (!file_exists($d)) { @mkdir($d, 0777, true); }
@@ -52,7 +51,6 @@ function http_basic_get_json(string $url, string $username, string $password, ar
 }
 function fmt_price_label($amount): string {
     if ($amount === null) return '0 €';
-    // format like "12.345 €" (de-DE grouping)
     $n = number_format((float)$amount, 0, ',', '.');
     return $n . ' €';
 }
@@ -62,13 +60,12 @@ function gear_label($value) {
     return 'Manual_gear';
 }
 
-// ------- Env & Params -------
 $user = getenv('MOBILE_USER') ?: '';
 $pass = getenv('MOBILE_PASSWORD') ?: '';
 $cust = getenv('CUSTOMER_NUMBERS') ?: '';
 if ($user === '' || $pass === '' || $cust === '') {
     http_response_code(500);
-    echo json_encode(["error"=>"Missing env MOBILE_USER/MOBILE_PASSWORD/CUSTOMER_NUMBERS"]);
+    echo json_encode({"error":"Missing env MOBILE_USER/MOBILE_PASSWORD/CUSTOMER_NUMBERS"});
     exit;
 }
 $ttl    = isset($_GET['ttl']) ? max(30, (int)$_GET['ttl']) : 300;
@@ -87,7 +84,7 @@ if (!$force) {
     }
 }
 
-// 1) Collect keys from search
+// Collect keys from search
 $keys = [];
 $page = 1;
 $maxPages = 30;
@@ -96,7 +93,7 @@ while ($page <= $maxPages && count($keys) < $limit) {
     [$j, $e] = http_basic_get_json($url, $user, $pass);
     if ($e) {
         http_response_code(502);
-        echo json_encode(["error"=>"search_fetch_failed","page"=>$page,"details"=>$e]);
+        echo json_encode(["error"=>"search_fetch_failed","page"=>$page,"details"=>$e], JSON_UNESCAPED_UNICODE);
         exit;
     }
     $sr  = $j['searchResult'] ?? null;
@@ -115,7 +112,7 @@ while ($page <= $maxPages && count($keys) < $limit) {
     $page = $current + 1;
 }
 
-// 2) Fetch details and map to **old schema**
+// Fetch details -> compat schema
 $out = [];
 foreach ($keys as $key) {
     $detailUrl = $base . '/ad/' . rawurlencode((string)$key);
@@ -131,13 +128,12 @@ foreach ($keys as $key) {
     } elseif (isset($ad['price']['consumerPrice']['amount'])) {
         $priceAmount = (float)$ad['price']['consumerPrice']['amount'];
     }
-    $fuel = $ad['fuel'] ?? null;
+    $fuel = $ad['fuel'] ?? "";
     $km   = (int)($ad['mileageInKm'] ?? $ad['mileage'] ?? 0);
     $firstReg = $ad['firstRegistration'] ?? ($ad['firstRegistrationDate'] ?? '');
     $year = 0;
     if (is_string($firstReg) && preg_match('/^([0-9]{4})/', $firstReg, $m)) { $year = (int)$m[1]; }
 
-    // images
     $imgUrl = null;
     if (isset($ad['images']['image']) && is_array($ad['images']['image'])) {
         foreach ($ad['images']['image'] as $img) {
@@ -148,12 +144,7 @@ foreach ($keys as $key) {
             if (is_array($img) && !empty($img['url'])) { $imgUrl = $img['url']; break; }
         }
     }
-    // Use our proxy path. Legacy schema used "/img?u="; our runtime rewrites /img.php -> /api/img.php
-    // We support both ?src= and legacy ?u=, so we can emit the same as before:
-    $imgProxy = $imgUrl ? ('/img.php?src=' . rawurlencode($imgUrl)) : null;
-
-    // specs string: "<km> km · <Fuel> · <Automatic_gear|Manual_gear>"
-    $specs = number_format($km, 0, ',', '.') . ' km · ' . ($fuel ?? '') . ' · ' . gear_label($ad['gearbox'] ?? ($ad['transmission'] ?? ''));
+    $imgProxy = $imgUrl ? ('/img.php?src=' . rawurlencode($imgUrl)) : "";
 
     $out[] = [
         "adId"       => $adId,
@@ -161,15 +152,14 @@ foreach ($keys as $key) {
         "title"      => $title,
         "price"      => (int)($priceAmount ?? 0),
         "priceLabel" => fmt_price_label($priceAmount),
-        "specs"      => $specs,
-        "fuel"       => $fuel ?? "",
+        "specs"      => number_format($km, 0, ',', '.') . ' km · ' . $fuel . ' · ' . gear_label($ad['gearbox'] ?? ($ad['transmission'] ?? '')),
+        "fuel"       => $fuel,
         "km"         => $km,
         "year"       => $year,
-        "img"        => $imgProxy ?: ""
+        "img"        => $imgProxy
     ];
 }
 
-// 3) Wrap exactly like your old cache.json
 $result = ["ts" => time(), "data" => $out];
 cache_set($cacheKey, $result);
 echo json_encode($result, JSON_UNESCAPED_UNICODE);
