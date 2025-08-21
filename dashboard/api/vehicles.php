@@ -1,32 +1,28 @@
 <?php
 declare(strict_types=1);
-ob_start(); // capture all output to prevent stray bytes
+ob_start();
 ini_set('display_errors', '0');
 error_reporting(E_ALL);
 
 $__errors = [];
 set_error_handler(function($severity, $message, $file, $line) use (&$__errors) {
-    // Convert warnings/notices to collected errors, don't echo
-    $__errors[] = ["severity"=>$severity, "message"=>$message, "file"=>$file, "line"=>$line];
+    $__errors[] =(["severity"=>$severity, "message"=>$message, "file"=>$file, "line"=>$line]);
     return true;
 });
 register_shutdown_function(function() use (&$__errors) {
     $last = error_get_last();
     if ($last !== null) {
-        // Fatal error occurred; emit JSON
         while (ob_get_level() > 0) { ob_end_clean(); }
         header('Content-Type: application/json; charset=utf-8');
         http_response_code(500);
-        echo json_encode(["error"=>"fatal", "details"=>$last, "hint"=>"Check PHP syntax / runtime."], JSON_UNESCAPED_UNICODE);
+        echo json_encode(["error"=>"fatal","details"=>$last], JSON_UNESCAPED_UNICODE);
         exit;
     }
 });
-
-function finish_json($payload, int $status=200, array $errors=[]) {
+function finish_json($payload, int $status=200) {
     while (ob_get_level() > 0) { ob_end_clean(); }
     header('Content-Type: application/json; charset=utf-8');
     http_response_code($status);
-    if (!empty($errors)) $payload["_errors"] = $errors;
     echo json_encode($payload, JSON_UNESCAPED_UNICODE);
     exit;
 }
@@ -89,12 +85,16 @@ function gear_label($value) {
     if (strpos($v, 'auto') !== false || strpos($v, 'dsg') !== false) return 'Automatic_gear';
     return 'Manual_gear';
 }
+function first_year_from($val): int {
+    if (is_string($val) && preg_match('/^([0-9]{4})/', $val, $m)) return (int)$m[1];
+    return 0;
+}
 
 $user = getenv('MOBILE_USER') ?: '';
 $pass = getenv('MOBILE_PASSWORD') ?: '';
 $cust = getenv('CUSTOMER_NUMBERS') ?: '';
 if ($user === '' || $pass === '' || $cust === '') {
-    finish_json(["error"=>"Missing env MOBILE_USER/MOBILE_PASSWORD/CUSTOMER_NUMBERS"], 500, $__errors);
+    finish_json(["error"=>"Missing env MOBILE_USER/MOBILE_PASSWORD/CUSTOMER_NUMBERS"], 500);
 }
 
 $ttl    = isset($_GET['ttl']) ? max(30, (int)$_GET['ttl']) : 300;
@@ -103,32 +103,55 @@ $limit  = isset($_GET['limit']) ? max(1, min(200, (int)$_GET['limit'])) : 60;
 
 $base   = 'https://services.mobile.de/search-api';
 $query  = 'customerNumber=' . rawurlencode($cust) . '&country=DE&sort.field=modificationTime&sort.order=DESCENDING&page.size=100';
-$cacheKey = 'compat_schema_' . md5($query . '|limit=' . $limit);
+$cacheKey = 'compat_schema_rescue_' . md5($query . '|limit=' . $limit);
 
 if (!$force) {
     $cached = cache_get($cacheKey, $ttl);
-    if ($cached !== null) {
-        finish_json($cached, 200, $__errors);
-    }
+    if ($cached !== null) finish_json($cached, 200);
 }
 
-// Collect keys
-$keys = [];
+// 1) Search → build items directly from search JSON (mobileAdId, detailPageUrl, mileage, fuel exist in Search New JSON)
+$items = [];
 $page = 1;
 $maxPages = 30;
-while ($page <= $maxPages && count($keys) < $limit) {
+while ($page <= $maxPages and count($items) < $limit) {
     $url = $base . '/search?' . $query . '&page.number=' . $page;
     [$j, $e] = http_basic_get_json($url, $user, $pass);
-    if ($e) finish_json(["error"=>"search_fetch_failed","page"=>$page,"details"=>$e], 502, $__errors);
+    if ($e) finish_json(["error"=>"search_fetch_failed","page"=>$page,"details"=>$e], 502);
     $sr  = $j['searchResult'] ?? null;
     $ads = is_array($sr) ? ($sr['ads'] ?? []) : ($j['ads'] ?? []);
     if (!is_array($ads) || !count($ads)) break;
     foreach ($ads as $ad) {
-        $key = $ad['key'] ?? ($ad['ad']['key'] ?? null);
-        if ($key) {
-            $keys[] = $key;
-            if (count($keys) >= $limit) break;
+        // New JSON uses mobileAdId etc. in search result
+        $adId = (string)($ad['mobileAdId'] ?? $ad['id'] ?? $ad['key'] ?? '');
+        $url  = $ad['detailPageUrl'] ?? '';
+        $title= $ad['title'] ?? (trim(($ad['make'] ?? '') . ' ' . ($ad['model'] ?? '')));
+        // price sometimes not present in Search JSON
+        $priceAmount = null;
+        if (isset($ad['price']['consumerPriceGross'])) {
+            $priceAmount = (float)$ad['price']['consumerPriceGross'];
+        } elseif (isset($ad['price']['consumerPrice']['amount'])) {
+            $priceAmount = (float)$ad['price']['consumerPrice']['amount'];
         }
+        $fuel = $ad['fuel'] ?? "";
+        $km   = (int)($ad['mileageInKm'] ?? $ad['mileage'] ?? 0);
+        $year = first_year_from($ad['firstRegistration'] ?? ($ad['firstRegistrationDate'] ?? ''));
+        // no images in search → leave blank for now; we'll fill from details if needed
+        $imgProxy = "";
+
+        $items[] = [
+            "adId"       => $adId,
+            "url"        => $url,
+            "title"      => $title,
+            "price"      => (int)($priceAmount ?? 0),
+            "priceLabel" => fmt_price_label($priceAmount),
+            "specs"      => number_format($km, 0, ',', '.') . ' km · ' . $fuel . ' · ' . gear_label($ad['gearbox'] ?? ($ad['transmission'] ?? '')),
+            "fuel"       => $fuel,
+            "km"         => $km,
+            "year"       => $year,
+            "img"        => $imgProxy
+        ];
+        if (count($items) >= $limit) break;
     }
     $current = (int)($sr['currentPage'] ?? $page);
     $max     = (int)($sr['maxPages'] ?? $page);
@@ -136,54 +159,53 @@ while ($page <= $maxPages && count($keys) < $limit) {
     $page = $current + 1;
 }
 
-// Details -> compat schema
-$out = [];
-foreach ($keys as $key) {
+// 2) Enrich critical fields via Detail API where missing (price==0 OR img=="")
+$enrichCount = 0;
+foreach ($items as &$it) {
+    if ($it["price"] > 0 and $it["img"] !== "") continue;
+    // try to extract numeric key id from adId or from detail url
+    $key = null;
+    if ($it["adId"] !== "") $key = preg_replace('/[^0-9]/', '', (string)$it["adId"]);
+    if ((!$key || $key === "") && $it["url"]) {
+        if (preg_match('~id=([0-9]+)~', $it["url"], $m)) $key = $m[1];
+    }
+    if (!$key) continue;
     $detailUrl = $base . '/ad/' . rawurlencode((string)$key);
     [$ad, $derr] = http_basic_get_json($detailUrl, $user, $pass);
     if ($derr || !$ad) continue;
-
-    $adId = (string)($ad['mobileAdId'] ?? $ad['adKey'] ?? $key);
-    $url  = $ad['detailPageUrl'] ?? ('https://suchen.mobile.de/fahrzeuge/details.html?id=' . rawurlencode((string)$adId));
-    $title= $ad['title'] ?? (trim(($ad['make'] ?? '') . ' ' . ($ad['model'] ?? '')));
-    $priceAmount = null;
-    if (isset($ad['price']['consumerPriceGross'])) {
-        $priceAmount = (float)$ad['price']['consumerPriceGross'];
-    } elseif (isset($ad['price']['consumerPrice']['amount'])) {
-        $priceAmount = (float)$ad['price']['consumerPrice']['amount'];
-    }
-    $fuel = $ad['fuel'] ?? "";
-    $km   = (int)($ad['mileageInKm'] ?? $ad['mileage'] ?? 0);
-    $firstReg = $ad['firstRegistration'] ?? ($ad['firstRegistrationDate'] ?? '');
-    $year = 0;
-    if (is_string($firstReg) && preg_match('/^([0-9]{4})/', $firstReg, $m)) { $year = (int)$m[1]; }
-
-    $imgUrl = null;
-    if (isset($ad['images']['image']) && is_array($ad['images']['image'])) {
-        foreach ($ad['images']['image'] as $img) {
-            if (!empty($img['url'])) { $imgUrl = $img['url']; break; }
+    // fill price
+    if ($it["price"] == 0) {
+        $pa = null;
+        if (isset($ad['price']['consumerPriceGross'])) {
+            $pa = (float)$ad['price']['consumerPriceGross'];
+        } elseif (isset($ad['price']['consumerPrice']['amount'])) {
+            $pa = (float)$ad['price']['consumerPrice']['amount'];
         }
-    } elseif (isset($ad['images']) && is_array($ad['images'])) {
-        foreach ($ad['images'] as $img) {
-            if (is_array($img) && !empty($img['url'])) { $imgUrl = $img['url']; break; }
+        if ($pa !== null) {
+            $it["price"] = (int)$pa;
+            $it["priceLabel"] = fmt_price_label($pa);
         }
     }
-    $imgProxy = $imgUrl ? ('/img.php?src=' . rawurlencode($imgUrl)) : "";
-
-    $out[] = [
-        "adId"       => $adId,
-        "url"        => $url,
-        "title"      => $title,
-        "price"      => (int)($priceAmount ?? 0),
-        "priceLabel" => fmt_price_label($priceAmount),
-        "specs"      => number_format($km, 0, ',', '.') . ' km · ' . $fuel . ' · ' . gear_label($ad['gearbox'] ?? ($ad['transmission'] ?? '')),
-        "fuel"       => $fuel,
-        "km"         => $km,
-        "year"       => $year,
-        "img"        => $imgProxy
-    ];
+    // fill image
+    if ($it["img"] === "") {
+        $imgUrl = null;
+        if (isset($ad['images']['image']) && is_array($ad['images']['image'])) {
+            foreach ($ad['images']['image'] as $img) {
+                if (!empty($img['url'])) { $imgUrl = $img['url']; break; }
+            }
+        } elseif (isset($ad['images']) && is_array($ad['images'])) {
+            foreach ($ad['images'] as $img) {
+                if (is_array($img) && !empty($img['url'])) { $imgUrl = $img['url']; break; }
+            }
+        }
+        if ($imgUrl) $it["img"] = '/img.php?src=' . rawurlencode($imgUrl);
+    }
+    $enrichCount += 1;
+    if ($enrichCount >= $limit) break; // cap enrich to limit
 }
+unset($it);
 
-$result = ["ts" => time(), "data" => $out];
+// 3) Wrap exactly like legacy cache
+$result = ["ts" => time(), "data" => $items];
 cache_set($cacheKey, $result);
-finish_json($result, 200, $__errors);
+finish_json($result, 200);
