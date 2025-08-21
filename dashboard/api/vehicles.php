@@ -1,13 +1,9 @@
 <?php
 declare(strict_types=1);
-
-// IMPORTANT: This file must be saved as UTF-8 **without BOM** and with **no whitespace before <?php**.
-
-// Strictly set headers before any output:
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: s-maxage=30, stale-while-revalidate=120');
 
-// --- Helpers (no output) ---
+// ------- Helpers (no closing ?> to avoid stray output) -------
 function cache_dir(): string {
     $dir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'azkiener_cache';
     if (!file_exists($dir)) { @mkdir($dir, 0777, true); }
@@ -19,14 +15,13 @@ function cache_get(string $key, int $ttl) {
     if ((time() - filemtime($p)) > $ttl) return null;
     $txt = @file_get_contents($p);
     if ($txt === false) return null;
-    $j = json_decode($txt, true);
-    return $j;
+    return json_decode($txt, true);
 }
 function cache_set(string $key, $value): void {
     $p = cache_dir() . DIRECTORY_SEPARATOR . md5($key) . '.json';
     @file_put_contents($p, json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), LOCK_EX);
 }
-function http_basic_get_json(string $url, string $username, string $password, array $headers = []) {
+function http_basic_get(string $url, string $username, string $password, array $headers = []) {
     $ch = curl_init();
     $allHeaders = array_merge([
         'Accept: application/vnd.de.mobile.api+json',
@@ -46,6 +41,10 @@ function http_basic_get_json(string $url, string $username, string $password, ar
     $err  = curl_error($ch);
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
+    return [$resp, $code, $err];
+}
+function http_basic_get_json(string $url, string $username, string $password, array $headers = []) {
+    [$resp, $code, $err] = http_basic_get($url, $username, $password, $headers);
     if ($err || $code >= 400 || $resp === false || $resp === '') {
         return [null, ["http_code"=>$code, "error"=>$err ?: "empty response"]];
     }
@@ -55,9 +54,8 @@ function http_basic_get_json(string $url, string $username, string $password, ar
     }
     return [$json, null];
 }
-function t($v) { return is_string($v) ? trim($v) : $v; }
+function t($v){ return is_string($v) ? trim($v) : $v; }
 
-// --- Env ---
 $user = getenv('MOBILE_USER') ?: '';
 $pass = getenv('MOBILE_PASSWORD') ?: '';
 $cust = getenv('CUSTOMER_NUMBERS') ?: '';
@@ -67,16 +65,14 @@ if ($user === '' || $pass === '' || $cust === '') {
     exit;
 }
 
-// --- Params ---
-$ttl   = isset($_GET['ttl']) ? max(30, (int)$_GET['ttl']) : 300;
-$force = isset($_GET['force']);
+$ttl    = isset($_GET['ttl']) ? max(30, (int)$_GET['ttl']) : 300;
+$force  = isset($_GET['force']);
+$limit  = isset($_GET['limit']) ? max(1, min(200, (int)$_GET['limit'])) : 60; // cap total details
 $pageSize = 100;
+$base   = 'https://services.mobile.de/search-api';
+$query  = 'customerNumber=' . rawurlencode($cust) . '&country=DE&sort.field=modificationTime&sort.order=DESCENDING&page.size=' . $pageSize;
 
-// --- Build query ---
-$base = 'https://services.mobile.de/search-api/search';
-$query = 'customerNumber=' . rawurlencode($cust) . '&country=DE&sort.field=modificationTime&sort.order=DESCENDING&page.size=' . $pageSize;
-$cacheKey = 'mobilede_' . md5($query);
-
+$cacheKey = 'mobilede_detail_' . md5($query . '|limit=' . $limit);
 if (!$force) {
     $cached = cache_get($cacheKey, $ttl);
     if ($cached !== null) {
@@ -85,85 +81,81 @@ if (!$force) {
     }
 }
 
-// --- Fetch pages ---
-$allAds = [];
+// 1) Fetch search pages to collect ad keys (and URLs)
+$keys = [];
 $page = 1;
-$maxPages = 30; // safety
-while ($page <= $maxPages) {
-    $url = $base . '?' . $query . '&page.number=' . $page;
+$maxPages = 30;
+while ($page <= $maxPages && count($keys) < $limit) {
+    $url = $base . '/search?' . $query . '&page.number=' . $page;
     [$json, $err] = http_basic_get_json($url, $user, $pass);
     if ($err) {
         http_response_code(502);
-        echo json_encode(["status"=>"error","message"=>"fetch_failed","page"=>$page,"details"=>$err], JSON_UNESCAPED_UNICODE);
+        echo json_encode(["status"=>"error","message"=>"search_fetch_failed","page"=>$page,"details"=>$err], JSON_UNESCAPED_UNICODE);
         exit;
     }
-    // New JSON format contains searchResult
     $sr = $json['searchResult'] ?? null;
-    $ads = [];
-    if (is_array($sr)) {
-        $ads = $sr['ads'] ?? [];
-        $current = (int)($sr['currentPage'] ?? $page);
-        $max     = (int)($sr['maxPages'] ?? $page);
-        $maxPages = max(1, min($maxPages, $max));
-        $page = $current + 1;
-    } else {
-        // legacy fallback
-        $ads = $json['ads'] ?? [];
-        $page += 1;
-        if (count($ads) < $pageSize) { $maxPages = 0; }
-    }
-    if (!is_array($ads) || count($ads) === 0) { break; }
-    $allAds = array_merge($allAds, $ads);
-}
-
-// --- Normalize ---
-$out = [];
-foreach ($allAds as $ad) {
-    $veh = isset($ad['ad']) && is_array($ad['ad']) ? $ad['ad'] : $ad;
-    $id  = $veh['id'] ?? ($veh['key'] ?? null);
-    $title = $veh['title'] ?? null;
-    if (!$title) {
-        $make = $veh['make'] ?? ($veh['classification']['make'] ?? null);
-        $model= $veh['model'] ?? ($veh['classification']['model'] ?? null);
-        $title = trim(($make ? $make . ' ' : '') . ($model ?: ''));
-    }
-    $price = null;
-    if (isset($veh['price']['consumerPrice']['amount'])) {
-        $price = $veh['price']['consumerPrice']['amount'];
-    } elseif (isset($veh['price']['gross']['amount'])) {
-        $price = $veh['price']['gross']['amount'];
-    }
-    $images = [];
-    if (isset($veh['images']['image']) && is_array($veh['images']['image'])) {
-        foreach ($veh['images']['image'] as $img) {
-            if (isset($img['url'])) { $images[] = $img['url']; }
+    $ads = is_array($sr) ? ($sr['ads'] ?? []) : ($json['ads'] ?? []);
+    if (!is_array($ads) || !count($ads)) break;
+    foreach ($ads as $ad) {
+        // New JSON search item may include lightweight ad; ensure we capture key and link
+        $key = $ad['key'] ?? ($ad['ad']['key'] ?? null);
+        $adUrl = $ad['url'] ?? ($ad['ad']['url'] ?? null);
+        if (!$key && $adUrl) {
+            // e.g. https://services.mobile.de/search-api/ad/15012
+            if (preg_match('~/ad/(\d+)~', $adUrl, $m)) { $key = $m[1]; }
+        }
+        if ($key) {
+            $keys[] = $key;
+            if (count($keys) >= $limit) break;
         }
     }
-    $fuel = $veh['fuel'] ?? null;
-    $gear = $veh['gearbox'] ?? ($veh['transmission'] ?? null);
-    $mileage = $veh['mileage'] ?? ($veh['mileageInKm'] ?? null);
-    $firstReg = $veh['firstRegistrationDate'] ?? ($veh['firstRegistration'] ?? null);
-    $powerKW = $veh['power'] ?? ($veh['powerInKW'] ?? null);
-    $make = $veh['make'] ?? ($veh['classification']['make'] ?? null);
-    $model= $veh['model'] ?? ($veh['classification']['model'] ?? null);
-    $detailUrl = $veh['adDetailPageUrl'] ?? null;
+    $current = (int)($sr['currentPage'] ?? $page);
+    $max     = (int)($sr['maxPages'] ?? $page);
+    $maxPages = max(1, min($maxPages, $max));
+    $page = $current + 1;
+}
 
+// 2) Fetch full details for each ad-key
+$out = [];
+foreach ($keys as $key) {
+    $detailUrl = $base . '/ad/' . rawurlencode((string)$key);
+    [$adJson, $derr] = http_basic_get_json($detailUrl, $user, $pass);
+    if ($derr || !$adJson) { continue; }
+    // According to docs, new JSON fields include: mobileAdId, detailPageUrl, images, price.consumerPriceGross
+    $id = $adJson['mobileAdId'] ?? ($adJson['adKey'] ?? $key);
+    $price = null;
+    if (isset($adJson['price']['consumerPriceGross'])) {
+        $price = (float)$adJson['price']['consumerPriceGross'];
+    } elseif (isset($adJson['price']['consumerPrice']['amount'])) {
+        $price = (float)$adJson['price']['consumerPrice']['amount'];
+    }
+    $images = [];
+    if (isset($adJson['images']['image']) && is_array($adJson['images']['image'])) {
+        foreach ($adJson['images']['image'] as $img) {
+            if (!empty($img['url'])) $images[] = $img['url'];
+        }
+    } elseif (isset($adJson['images']) && is_array($adJson['images'])) {
+        // Some formats might give a flat array
+        foreach ($adJson['images'] as $img) {
+            if (is_array($img) && !empty($img['url'])) $images[] = $img['url'];
+        }
+    }
+    $title = $adJson['title'] ?? (trim(($adJson['make'] ?? '') . ' ' . ($adJson['model'] ?? '')));
     $out[] = [
         "id" => $id,
-        "title" => t($title),
+        "title" => $title,
         "price" => $price,
         "images" => $images,
-        "fuel" => $fuel,
-        "gear" => $gear,
-        "mileage" => $mileage,
-        "firstRegistration" => $firstReg,
-        "powerKW" => $powerKW,
-        "make" => $make,
-        "model" => $model,
-        "url" => $detailUrl
+        "fuel" => $adJson['fuel'] ?? null,
+        "gear" => $adJson['gearbox'] ?? ($adJson['transmission'] ?? null),
+        "mileage" => $adJson['mileage'] ?? ($adJson['mileageInKm'] ?? null),
+        "firstRegistration" => $adJson['firstRegistration'] ?? ($adJson['firstRegistrationDate'] ?? null),
+        "powerKW" => $adJson['power'] ?? ($adJson['powerInKW'] ?? null),
+        "make" => $adJson['make'] ?? null,
+        "model" => $adJson['model'] ?? null,
+        "url" => $adJson['detailPageUrl'] ?? null
     ];
 }
 
-// --- Cache and respond ---
 cache_set($cacheKey, $out);
 echo json_encode(["status"=>"ok","cached"=>false,"data"=>$out], JSON_UNESCAPED_UNICODE);
