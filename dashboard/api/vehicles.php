@@ -3,25 +3,25 @@ declare(strict_types=1);
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: s-maxage=30, stale-while-revalidate=120');
 
-// ------- Helpers (no closing ?> to avoid stray output) -------
+// ------- Helpers -------
 function cache_dir(): string {
-    $dir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'azkiener_cache';
-    if (!file_exists($dir)) { @mkdir($dir, 0777, true); }
-    return $dir;
+    $d = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'azkiener_cache';
+    if (!file_exists($d)) { @mkdir($d, 0777, true); }
+    return $d;
 }
 function cache_get(string $key, int $ttl) {
     $p = cache_dir() . DIRECTORY_SEPARATOR . md5($key) . '.json';
     if (!file_exists($p)) return null;
     if ((time() - filemtime($p)) > $ttl) return null;
-    $txt = @file_get_contents($p);
-    if ($txt === false) return null;
-    return json_decode($txt, true);
+    $t = @file_get_contents($p);
+    if ($t === false) return null;
+    return json_decode($t, true);
 }
 function cache_set(string $key, $value): void {
     $p = cache_dir() . DIRECTORY_SEPARATOR . md5($key) . '.json';
     @file_put_contents($p, json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), LOCK_EX);
 }
-function http_basic_get(string $url, string $username, string $password, array $headers = []) {
+function http_basic_get_json(string $url, string $username, string $password, array $headers = []) {
     $ch = curl_init();
     $allHeaders = array_merge([
         'Accept: application/vnd.de.mobile.api+json',
@@ -41,10 +41,6 @@ function http_basic_get(string $url, string $username, string $password, array $
     $err  = curl_error($ch);
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
-    return [$resp, $code, $err];
-}
-function http_basic_get_json(string $url, string $username, string $password, array $headers = []) {
-    [$resp, $code, $err] = http_basic_get($url, $username, $password, $headers);
     if ($err || $code >= 400 || $resp === false || $resp === '') {
         return [null, ["http_code"=>$code, "error"=>$err ?: "empty response"]];
     }
@@ -54,56 +50,60 @@ function http_basic_get_json(string $url, string $username, string $password, ar
     }
     return [$json, null];
 }
-function t($v){ return is_string($v) ? trim($v) : $v; }
+function fmt_price_label($amount): string {
+    if ($amount === null) return '0 €';
+    // format like "12.345 €" (de-DE grouping)
+    $n = number_format((float)$amount, 0, ',', '.');
+    return $n . ' €';
+}
+function gear_label($value) {
+    $v = strtolower((string)$value);
+    if (strpos($v, 'auto') !== false || strpos($v, 'dsg') !== false) return 'Automatic_gear';
+    return 'Manual_gear';
+}
 
+// ------- Env & Params -------
 $user = getenv('MOBILE_USER') ?: '';
 $pass = getenv('MOBILE_PASSWORD') ?: '';
 $cust = getenv('CUSTOMER_NUMBERS') ?: '';
 if ($user === '' || $pass === '' || $cust === '') {
     http_response_code(500);
-    echo json_encode(["status"=>"error","message"=>"Missing env MOBILE_USER/MOBILE_PASSWORD/CUSTOMER_NUMBERS"]);
+    echo json_encode(["error"=>"Missing env MOBILE_USER/MOBILE_PASSWORD/CUSTOMER_NUMBERS"]);
     exit;
 }
-
 $ttl    = isset($_GET['ttl']) ? max(30, (int)$_GET['ttl']) : 300;
 $force  = isset($_GET['force']);
-$limit  = isset($_GET['limit']) ? max(1, min(200, (int)$_GET['limit'])) : 60; // cap total details
-$pageSize = 100;
-$base   = 'https://services.mobile.de/search-api';
-$query  = 'customerNumber=' . rawurlencode($cust) . '&country=DE&sort.field=modificationTime&sort.order=DESCENDING&page.size=' . $pageSize;
+$limit  = isset($_GET['limit']) ? max(1, min(200, (int)$_GET['limit'])) : 60;
 
-$cacheKey = 'mobilede_detail_' . md5($query . '|limit=' . $limit);
+$base   = 'https://services.mobile.de/search-api';
+$query  = 'customerNumber=' . rawurlencode($cust) . '&country=DE&sort.field=modificationTime&sort.order=DESCENDING&page.size=100';
+$cacheKey = 'compat_schema_' . md5($query . '|limit=' . $limit);
+
 if (!$force) {
     $cached = cache_get($cacheKey, $ttl);
     if ($cached !== null) {
-        echo json_encode(["status"=>"ok","cached"=>true,"data"=>$cached], JSON_UNESCAPED_UNICODE);
+        echo json_encode($cached, JSON_UNESCAPED_UNICODE);
         exit;
     }
 }
 
-// 1) Fetch search pages to collect ad keys (and URLs)
+// 1) Collect keys from search
 $keys = [];
 $page = 1;
 $maxPages = 30;
 while ($page <= $maxPages && count($keys) < $limit) {
     $url = $base . '/search?' . $query . '&page.number=' . $page;
-    [$json, $err] = http_basic_get_json($url, $user, $pass);
-    if ($err) {
+    [$j, $e] = http_basic_get_json($url, $user, $pass);
+    if ($e) {
         http_response_code(502);
-        echo json_encode(["status"=>"error","message"=>"search_fetch_failed","page"=>$page,"details"=>$err], JSON_UNESCAPED_UNICODE);
+        echo json_encode(["error"=>"search_fetch_failed","page"=>$page,"details"=>$e]);
         exit;
     }
-    $sr = $json['searchResult'] ?? null;
-    $ads = is_array($sr) ? ($sr['ads'] ?? []) : ($json['ads'] ?? []);
+    $sr  = $j['searchResult'] ?? null;
+    $ads = is_array($sr) ? ($sr['ads'] ?? []) : ($j['ads'] ?? []);
     if (!is_array($ads) || !count($ads)) break;
     foreach ($ads as $ad) {
-        // New JSON search item may include lightweight ad; ensure we capture key and link
         $key = $ad['key'] ?? ($ad['ad']['key'] ?? null);
-        $adUrl = $ad['url'] ?? ($ad['ad']['url'] ?? null);
-        if (!$key && $adUrl) {
-            // e.g. https://services.mobile.de/search-api/ad/15012
-            if (preg_match('~/ad/(\d+)~', $adUrl, $m)) { $key = $m[1]; }
-        }
         if ($key) {
             $keys[] = $key;
             if (count($keys) >= $limit) break;
@@ -115,47 +115,61 @@ while ($page <= $maxPages && count($keys) < $limit) {
     $page = $current + 1;
 }
 
-// 2) Fetch full details for each ad-key
+// 2) Fetch details and map to **old schema**
 $out = [];
 foreach ($keys as $key) {
     $detailUrl = $base . '/ad/' . rawurlencode((string)$key);
-    [$adJson, $derr] = http_basic_get_json($detailUrl, $user, $pass);
-    if ($derr || !$adJson) { continue; }
-    // According to docs, new JSON fields include: mobileAdId, detailPageUrl, images, price.consumerPriceGross
-    $id = $adJson['mobileAdId'] ?? ($adJson['adKey'] ?? $key);
-    $price = null;
-    if (isset($adJson['price']['consumerPriceGross'])) {
-        $price = (float)$adJson['price']['consumerPriceGross'];
-    } elseif (isset($adJson['price']['consumerPrice']['amount'])) {
-        $price = (float)$adJson['price']['consumerPrice']['amount'];
+    [$ad, $derr] = http_basic_get_json($detailUrl, $user, $pass);
+    if ($derr || !$ad) continue;
+
+    $adId = (string)($ad['mobileAdId'] ?? $ad['adKey'] ?? $key);
+    $url  = $ad['detailPageUrl'] ?? ('https://suchen.mobile.de/fahrzeuge/details.html?id=' . rawurlencode((string)$adId));
+    $title= $ad['title'] ?? (trim(($ad['make'] ?? '') . ' ' . ($ad['model'] ?? '')));
+    $priceAmount = null;
+    if (isset($ad['price']['consumerPriceGross'])) {
+        $priceAmount = (float)$ad['price']['consumerPriceGross'];
+    } elseif (isset($ad['price']['consumerPrice']['amount'])) {
+        $priceAmount = (float)$ad['price']['consumerPrice']['amount'];
     }
-    $images = [];
-    if (isset($adJson['images']['image']) && is_array($adJson['images']['image'])) {
-        foreach ($adJson['images']['image'] as $img) {
-            if (!empty($img['url'])) $images[] = $img['url'];
+    $fuel = $ad['fuel'] ?? null;
+    $km   = (int)($ad['mileageInKm'] ?? $ad['mileage'] ?? 0);
+    $firstReg = $ad['firstRegistration'] ?? ($ad['firstRegistrationDate'] ?? '');
+    $year = 0;
+    if (is_string($firstReg) && preg_match('/^([0-9]{4})/', $firstReg, $m)) { $year = (int)$m[1]; }
+
+    // images
+    $imgUrl = null;
+    if (isset($ad['images']['image']) && is_array($ad['images']['image'])) {
+        foreach ($ad['images']['image'] as $img) {
+            if (!empty($img['url'])) { $imgUrl = $img['url']; break; }
         }
-    } elseif (isset($adJson['images']) && is_array($adJson['images'])) {
-        // Some formats might give a flat array
-        foreach ($adJson['images'] as $img) {
-            if (is_array($img) && !empty($img['url'])) $images[] = $img['url'];
+    } elseif (isset($ad['images']) && is_array($ad['images'])) {
+        foreach ($ad['images'] as $img) {
+            if (is_array($img) && !empty($img['url'])) { $imgUrl = $img['url']; break; }
         }
     }
-    $title = $adJson['title'] ?? (trim(($adJson['make'] ?? '') . ' ' . ($adJson['model'] ?? '')));
+    // Use our proxy path. Legacy schema used "/img?u="; our runtime rewrites /img.php -> /api/img.php
+    // We support both ?src= and legacy ?u=, so we can emit the same as before:
+    $imgProxy = $imgUrl ? ('/img.php?src=' . rawurlencode($imgUrl)) : null;
+
+    // specs string: "<km> km · <Fuel> · <Automatic_gear|Manual_gear>"
+    $specs = number_format($km, 0, ',', '.') . ' km · ' . ($fuel ?? '') . ' · ' . gear_label($ad['gearbox'] ?? ($ad['transmission'] ?? ''));
+
     $out[] = [
-        "id" => $id,
-        "title" => $title,
-        "price" => $price,
-        "images" => $images,
-        "fuel" => $adJson['fuel'] ?? null,
-        "gear" => $adJson['gearbox'] ?? ($adJson['transmission'] ?? null),
-        "mileage" => $adJson['mileage'] ?? ($adJson['mileageInKm'] ?? null),
-        "firstRegistration" => $adJson['firstRegistration'] ?? ($adJson['firstRegistrationDate'] ?? null),
-        "powerKW" => $adJson['power'] ?? ($adJson['powerInKW'] ?? null),
-        "make" => $adJson['make'] ?? null,
-        "model" => $adJson['model'] ?? null,
-        "url" => $adJson['detailPageUrl'] ?? null
+        "adId"       => $adId,
+        "url"        => $url,
+        "title"      => $title,
+        "price"      => (int)($priceAmount ?? 0),
+        "priceLabel" => fmt_price_label($priceAmount),
+        "specs"      => $specs,
+        "fuel"       => $fuel ?? "",
+        "km"         => $km,
+        "year"       => $year,
+        "img"        => $imgProxy ?: ""
     ];
 }
 
-cache_set($cacheKey, $out);
-echo json_encode(["status"=>"ok","cached"=>false,"data"=>$out], JSON_UNESCAPED_UNICODE);
+// 3) Wrap exactly like your old cache.json
+$result = ["ts" => time(), "data" => $out];
+cache_set($cacheKey, $result);
+echo json_encode($result, JSON_UNESCAPED_UNICODE);
