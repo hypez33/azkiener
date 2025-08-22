@@ -80,11 +80,10 @@
       </div>
     </section>
 
-    <!-- Öffnungszeiten & Kontakt/Infos -->
+    <!-- INFO -->
     <section class="mx-auto max-w-7xl px-4 pt-4 pb-10 sm:pt-0 sm:pb-12" aria-labelledby="info-title">
       <h2 id="info-title" class="sr-only">Öffnungszeiten und Kontakt</h2>
       <div class="grid lg:grid-cols-2 gap-6" data-reveal-group="100">
-        <!-- Öffnungszeiten -->
         <div class="card reveal" data-reveal="up">
           <div class="flex items-center gap-3">
             <div class="service-icon" aria-hidden="true">
@@ -100,7 +99,6 @@
           <p class="mt-3 text-xs text-gray-500">Probefahrten nach Vereinbarung möglich.</p>
         </div>
 
-        <!-- Kontakt-Infos -->
         <div class="card reveal" data-reveal="up">
           <div class="flex items-center gap-3">
             <div class="service-icon" aria-hidden="true">
@@ -135,7 +133,8 @@
       <div class="mt-6 grid gap-3 sm:grid-cols-3 reveal" data-reveal="up" data-reveal-delay="80">
         <input id="searchInput" type="search" class="input" placeholder="Suchen nach Marke/Modell …" aria-label="Fahrzeugsuche">
         <select id="fuelFilter" class="input" aria-label="Kraftstoff filtern">
-          <option value="">Alle Kraftstoffe</option><option>Benziner</option><option>Diesel</option><option>Hybrid</option><option>Elektrisch</option>
+          <option value="">Alle Kraftstoffe</option>
+          <option>Benziner</option><option>Diesel</option><option>Hybrid</option><option>Elektrisch</option>
         </select>
         <select id="sortSelect" class="input" aria-label="Sortierung auswählen">
           <option value="price-asc">Preis ↑</option><option value="price-desc">Preis ↓</option>
@@ -267,11 +266,5 @@
   </div>
 
   <script src="assets/js/main.js" defer></script>
-
-  <!-- Cookie-Consent: Beispiel für blockierte Scripts
-       <script type="text/plain" data-consent="analytics" data-src="https://cdn.example.com/analytics.js"></script>
-       <script type="text/plain" data-consent="marketing">console.log('ads');</script>
-  -->
-
 </body>
 </html>
