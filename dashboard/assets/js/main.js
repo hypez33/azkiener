@@ -1,229 +1,298 @@
-/* Autozentrum Kiener – Frontend-Logik (ohne externe Abhängigkeiten) */
-(function () {
-  "use strict";
+/* Autozentrum Kiener – Frontend Core
+ * - Fahrzeuge laden & rendern (mit Bild-Proxy /img.php)
+ * - Filter/Suche/Sortierung + "Mehr laden"
+ * - UI: Reveal, Dark-Mode, Mobile-Menü, Back-to-Top, Cookie-Banner
+ */
 
-  // ------------------------------
-  // Helpers
-  // ------------------------------
-  const $ = (sel, el = document) => el.querySelector(sel);
-  const $$ = (sel, el = document) => Array.from(el.querySelectorAll(sel));
-  const fmtNumber = (n) =>
-    (Number.isFinite(+n) ? new Intl.NumberFormat("de-DE").format(+n) : "");
-  const fmtPrice = (n) =>
-    Number.isFinite(+n)
-      ? new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(+n)
-      : (typeof n === "string" ? n : "");
+(() => {
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+
+  // ---------------------------------------------
+  // UTIL
+  // ---------------------------------------------
+  const fmt = new Intl.NumberFormat('de-DE');
+  const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
+
   const mapFuel = (val) => {
-    if (!val) return "";
-    const t = String(val).toLowerCase();
-    if (t.includes("petrol") || t.includes("benzin")) return "Benziner";
-    if (t.includes("diesel")) return "Diesel";
-    if (t.includes("electric")) return "Elektrisch";
-    if (t.includes("hybrid")) return "Hybrid";
-    if (t.includes("cng")) return "CNG";
-    if (t.includes("lpg")) return "LPG";
-    return val;
+    const t = String(val || '').toUpperCase();
+    if (t.includes('PETROL') || t === 'BENZIN') return 'Benziner';
+    if (t.includes('DIESEL')) return 'Diesel';
+    if (t.includes('ELECTRIC')) return 'Elektrisch';
+    if (t.includes('HYBRID')) return 'Hybrid';
+    if (t.includes('CNG')) return 'CNG';
+    if (t.includes('LPG')) return 'LPG';
+    return val || '';
   };
-  const mapGear = (src) => {
-    const t = String(src || "").toLowerCase();
-    if (t.includes("automatic_gear") || t.includes("automatik")) return "Automatik";
-    if (t.includes("manual_gear") || t.includes("schalt")) return "Manuell";
-    return "";
-  };
-  const imgProxy = (urlLike) => {
-    if (!urlLike) return "";
-    const u = String(urlLike);
-    if (u.startsWith("/img.php")) return u; // bereits proxied
-    if (!/^https?:\/\//i.test(u)) return "";
-    // akzeptiert sowohl ?src als auch ?u
-    return `/img.php?src=${encodeURIComponent(u)}`;
+  const mapGearFromSpecs = (specs) => {
+    const s = String(specs || '');
+    if (s.includes('Automatic_gear')) return 'Automatik';
+    if (s.includes('Manual_gear')) return 'Manuell';
+    return '';
   };
 
-  // ------------------------------
-  // Fahrzeuge: Laden, Rendern, Filtern
-  // ------------------------------
-  const state = {
-    all: [],
-    visible: [],
-    page: 1,
-    pageSize: 9
+  const buildImgSrc = (urlOrProxy) => {
+    if (!urlOrProxy) return '';
+    // API liefert bereits "/img.php?u=..."
+    if (/^\/img\.php\?/.test(urlOrProxy)) return urlOrProxy;
+    return `/img.php?src=${encodeURIComponent(urlOrProxy)}`;
   };
 
-  const els = {
-    grid: $("#vehiclesGrid"),
-    loadMore: $("#loadMoreBtn"),
-    search: $("#searchInput"),
-    fuel: $("#fuelFilter"),
-    sort: $("#sortSelect"),
-    reset: $("#resetFilters")
+  // ---------------------------------------------
+  // UI BASICS
+  // ---------------------------------------------
+  // Jahr im Footer
+  const yearEl = $('#year');
+  if (yearEl) yearEl.textContent = new Date().getFullYear();
+
+  // Theme Toggle
+  const root = document.documentElement;
+  const applyTheme = (t) => {
+    if (t === 'dark') root.classList.add('dark');
+    else root.classList.remove('dark');
   };
+  const storedTheme = localStorage.getItem('azk_theme');
+  applyTheme(storedTheme || 'light');
 
-  async function fetchVehicles() {
-    try {
-      const res = await fetch("/api/vehicles.php?limit=60", { cache: "no-store" });
-      const json = await res.json();
-      const raw = Array.isArray(json?.data) ? json.data : [];
+  const setupThemeToggle = (btn) => {
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+      const next = root.classList.contains('dark') ? 'light' : 'dark';
+      localStorage.setItem('azk_theme', next);
+      applyTheme(next);
+      const pressed = next === 'dark';
+      btn.setAttribute('aria-pressed', String(pressed));
+      const icon = $('#themeIcon', btn) || btn;
+      icon.textContent = pressed ? '☀️' : '🌙';
+    });
+  };
+  setupThemeToggle($('#themeToggle'));
+  setupThemeToggle($('#themeToggleMobile'));
 
-      // Normalisieren
-      state.all = raw.map((x) => {
-        const title = x.title || [x.make, x.model, x.variant].filter(Boolean).join(" ").trim();
-        const price = Number.isFinite(+x.price) ? +x.price : null;
-        const priceLabel = x.priceLabel || (price !== null ? fmtPrice(price) : "");
-        const img =
-          imgProxy(x.img) ||
-          imgProxy(x.image) ||
-          imgProxy((Array.isArray(x.images) && x.images[0]) || "");
+  // Mobile Menü
+  const mobileBtn = $('#mobileMenuBtn');
+  const mobileMenu = $('#mobileMenu');
+  if (mobileBtn && mobileMenu) {
+    mobileBtn.addEventListener('click', () => {
+      const open = !mobileMenu.classList.contains('open');
+      mobileMenu.classList.toggle('open', open);
+      mobileBtn.setAttribute('aria-expanded', String(open));
+    });
+    // Close on link click
+    mobileMenu.addEventListener('click', (e) => {
+      if (e.target.tagName === 'A') {
+        mobileMenu.classList.remove('open');
+        mobileBtn.setAttribute('aria-expanded', 'false');
+      }
+    });
+  }
 
-        const km = Number.isFinite(+x.km) ? +x.km : (Number.isFinite(+x.mileage) ? +x.mileage : null);
-        const specsStr = [x.gear, x.gearbox, x.specs].filter(Boolean).join(" ");
-        const url = x.url || x.link || "#";
+  // Back to top
+  const back = $('#backToTop');
+  if (back) {
+    window.addEventListener('scroll', () => {
+      back.classList.toggle('show', window.scrollY > 400);
+    });
+    back.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+  }
 
-        return {
-          id: x.id || cryptoRandomId(),
-          title,
-          img,
-          year: x.year || x.firstRegistration || "",
-          km,
-          fuel: mapFuel(x.fuel || x.fuelType || ""),
-          gear: mapGear(specsStr),
-          price,
-          priceLabel,
-          url
-        };
+  // Reveal Animation
+  const revealer = () => {
+    const items = $$('.reveal');
+    if (!('IntersectionObserver' in window) || !items.length) {
+      items.forEach((el) => el.classList.add('is-visible'));
+      return;
+    }
+    const io = new IntersectionObserver((ents) => {
+      ents.forEach((e) => {
+        if (e.isIntersecting) {
+          const d = parseInt(e.target.getAttribute('data-reveal-delay') || '0', 10);
+          setTimeout(() => e.target.classList.add('is-visible'), clamp(d, 0, 2000));
+          if (e.target.getAttribute('data-reveal-once') !== 'false') io.unobserve(e.target);
+        }
       });
+    }, { rootMargin: '0px 0px -10% 0px', threshold: 0.1 });
+    items.forEach((el) => io.observe(el));
+  };
+  revealer();
 
-      applyAndRender();
-    } catch (e) {
-      console.error("Fahrzeuge konnten nicht geladen werden", e);
-      renderError("Fahrzeuge konnten nicht geladen werden.");
-    }
+  // Cookie Banner (schlank)
+  const cookieBanner = $('#cookieBanner');
+  const cookieAccept = $('#cookieAcceptAll');
+  const cookieReject = $('#cookieReject');
+  const cookieSettingsBtn = $('#cookieSettingsBtn');
+
+  const enableDeferredScripts = (mode) => {
+    // Beispiel: <script type="text/plain" data-consent="analytics" data-src="..."></script>
+    $$('script[type="text/plain"][data-src]').forEach((s) => {
+      const needs = s.getAttribute('data-consent') || 'analytics';
+      if (mode === 'all' || needs === 'necessary') {
+        const real = document.createElement('script');
+        real.src = s.getAttribute('data-src');
+        document.body.appendChild(real);
+      }
+    });
+  };
+
+  const cons = localStorage.getItem('azk_cookie');
+  if (!cons && cookieBanner) cookieBanner.style.display = 'block';
+
+  const setConsent = (mode) => {
+    localStorage.setItem('azk_cookie', mode);
+    if (cookieBanner) cookieBanner.style.display = 'none';
+    enableDeferredScripts(mode);
+  };
+  cookieAccept && cookieAccept.addEventListener('click', () => setConsent('all'));
+  cookieReject && cookieReject.addEventListener('click', () => setConsent('necessary'));
+  cookieSettingsBtn && cookieSettingsBtn.addEventListener('click', () => {
+    // Minimal: Banner erneut zeigen
+    if (cookieBanner) cookieBanner.style.display = 'block';
+  });
+
+  // Newsletter Dummy
+  const newsletter = $('#newsletterForm');
+  if (newsletter) {
+    newsletter.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const email = $('#newsletterEmail').value.trim();
+      const ok = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+      $('#newsletterStatus').textContent = ok ? 'Danke! Wir melden uns.' : 'Bitte eine gültige E-Mail eingeben.';
+      if (ok) newsletter.reset();
+    });
   }
 
-  function cryptoRandomId() {
+  // ---------------------------------------------
+  // FAHRZEUGE
+  // ---------------------------------------------
+  const grid = $('#vehiclesGrid');
+  if (!grid) return;
+
+  const searchInput = $('#searchInput');
+  const fuelFilter = $('#fuelFilter');
+  const sortSelect = $('#sortSelect');
+  const resetBtn = $('#resetFilters');
+  const moreBtn = $('#loadMoreBtn');
+
+  let allCars = [];
+  let viewCars = [];
+  let shown = 0;
+  const PAGE = 9;
+
+  const showSkeletons = (n = 6) => {
+    grid.innerHTML = '';
+    for (let i = 0; i < n; i++) {
+      const sk = document.createElement('div');
+      sk.className = 'card-skeleton';
+      grid.appendChild(sk);
+    }
+  };
+
+  const fetchCars = async () => {
+    showSkeletons(9);
     try {
-      return crypto.randomUUID();
-    } catch {
-      return "id-" + Math.random().toString(36).slice(2);
+      const res = await fetch('/api/vehicles.php?limit=60', { cache: 'no-store' });
+      const json = await res.json();
+      const arr = Array.isArray(json?.data) ? json.data : [];
+      // Normalize
+      allCars = arr.map((c) => ({
+        id: c.adId,
+        url: c.url,
+        title: String(c.title || '').replace(/_/g, ' ').trim(),
+        price: Number(c.price || 0),
+        priceLabel: c.priceLabel || '',
+        km: Number(c.km || 0),
+        year: Number(c.year || 0),
+        fuel: mapFuel(c.fuel || ''),
+        gear: mapGearFromSpecs(c.specs),
+        img: buildImgSrc(c.img || '')
+      }));
+      applyFilters();
+    } catch (e) {
+      grid.innerHTML = '<div class="card">Fahrzeuge konnten nicht geladen werden. Bitte später erneut versuchen.</div>';
+      console.error(e);
     }
-  }
+  };
 
-  function applyAndRender({ resetPage = true } = {}) {
-    const q = (els.search?.value || "").trim().toLowerCase();
-    const fFuel = (els.fuel?.value || "").toLowerCase();
-    const sort = els.sort?.value || "price-asc";
+  const applyFilters = () => {
+    const q = (searchInput?.value || '').toLowerCase().trim();
+    const ff = (fuelFilter?.value || '').toLowerCase();
 
-    let arr = state.all.slice();
-
-    // Filter
-    if (q) {
-      arr = arr.filter((v) => v.title.toLowerCase().includes(q));
-    }
-    if (fFuel) {
-      arr = arr.filter((v) => v.fuel.toLowerCase().includes(fFuel));
-    }
+    viewCars = allCars.filter((c) => {
+      const okFuel = !ff || c.fuel.toLowerCase() === ff;
+      const okQ = !q || c.title.toLowerCase().includes(q);
+      return okFuel && okQ;
+    });
 
     // Sortierung
-    const sorters = {
-      "price-asc": (a, b) => (a.price ?? Infinity) - (b.price ?? Infinity),
-      "price-desc": (a, b) => (b.price ?? -Infinity) - (a.price ?? -Infinity),
-      "km-asc": (a, b) => (a.km ?? Infinity) - (b.km ?? Infinity),
-      "km-desc": (a, b) => (b.km ?? -Infinity) - (a.km ?? -Infinity),
-      "year-desc": (a, b) => String(b.year).localeCompare(String(a.year)),
-      "year-asc": (a, b) => String(a.year).localeCompare(String(b.year))
-    };
-    arr.sort(sorters[sort] || sorters["price-asc"]);
+    const s = sortSelect?.value || 'price-asc';
+    const dir = s.endsWith('desc') ? -1 : 1;
+    if (s.startsWith('price')) viewCars.sort((a, b) => (a.price - b.price) * dir);
+    else if (s.startsWith('km')) viewCars.sort((a, b) => (a.km - b.km) * dir);
+    else if (s.startsWith('year')) viewCars.sort((a, b) => (a.year - b.year) * dir);
 
-    // Paging
-    if (resetPage) state.page = 1;
-    const slice = arr.slice(0, state.page * state.pageSize);
+    // Render zurücksetzen
+    shown = 0;
+    grid.innerHTML = '';
+    renderMore();
+  };
 
-    state.visible = slice;
-    renderCards(slice);
-    toggleLoadMore(arr.length > slice.length);
-  }
-
-  function renderError(msg) {
-    if (!els.grid) return;
-    els.grid.innerHTML = `<div class="card" role="alert">${msg}</div>`;
-  }
-
-  function renderCards(list) {
-    if (!els.grid) return;
-
-    const frag = document.createDocumentFragment();
-    list.forEach((v) => frag.appendChild(buildCard(v)));
-
-    els.grid.innerHTML = "";
-    els.grid.appendChild(frag);
-  }
-
-  function buildCard(v) {
-    const art = document.createElement("article");
-    art.className = "vehicle-card reveal";
-    art.setAttribute("data-reveal", "up");
+  const renderCard = (c) => {
+    const el = document.createElement('article');
+    el.className = 'vehicle-card';
 
     // Media
-    const media = document.createElement("div");
-    media.className = "thumb";
-    if (v.img) {
-      const img = document.createElement("img");
-      img.src = v.img;
-      img.alt = v.title || "Fahrzeug";
-      img.loading = "lazy";
-      img.decoding = "async";
-      img.onerror = () => {
-        img.remove();
-        const ph = document.createElement("div");
-        ph.className = "thumb__placeholder";
-        ph.innerHTML = "<span>Foto folgt</span>";
-        media.appendChild(ph);
-      };
-      media.appendChild(img);
-    } else {
-      const ph = document.createElement("div");
-      ph.className = "thumb__placeholder";
-      ph.innerHTML = "<span>Foto folgt</span>";
+    const media = document.createElement('div');
+    media.className = 'thumb';
+    const img = document.createElement('img');
+    img.src = c.img || '';
+    img.alt = c.title || 'Fahrzeug';
+    img.loading = 'lazy';
+    img.decoding = 'async';
+    img.onerror = () => {
+      img.remove();
+      const ph = document.createElement('div');
+      ph.className = 'vehicle-card__ph';
+      ph.innerHTML = '<span>Foto folgt</span>';
       media.appendChild(ph);
-    }
+    };
+    media.appendChild(img);
 
     // Body
-    const body = document.createElement("div");
-    body.className = "body";
+    const body = document.createElement('div');
+    body.className = 'body';
 
-    const header = document.createElement("div");
-    header.className = "header";
-    const title = document.createElement("h3");
-    title.className = "title";
-    title.textContent = v.title || "";
+    const header = document.createElement('div');
+    header.className = 'header';
 
-    const price = document.createElement("div");
-    price.className = "pricePill";
-    price.textContent = v.priceLabel || "";
+    const title = document.createElement('h3');
+    title.className = 'title';
+    title.textContent = c.title;
+
+    const price = document.createElement('div');
+    price.className = 'pricePill';
+    price.textContent = c.priceLabel || (c.price ? fmt.format(c.price) + ' €' : '');
+
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    const kmNice = c.km ? (c.km >= 1000 ? `${Math.round(c.km / 1000)} Tsd. km` : `${fmt.format(c.km)} km`) : '';
+    const parts = [c.year || '', kmNice, c.fuel || '', c.gear || ''].filter(Boolean);
+    meta.textContent = parts.join(' · ');
+
+    const footer = document.createElement('div');
+    footer.className = 'footer';
+    const tags = document.createElement('div');
+    tags.className = 'meta';
+    tags.textContent = 'Scheckheft · Garantie';
+
+    const btn = document.createElement('a');
+    btn.className = 'details';
+    btn.href = c.url;
+    btn.target = '_blank';
+    btn.rel = 'noopener';
+    btn.textContent = 'Details';
 
     header.appendChild(title);
     header.appendChild(price);
-
-    const meta = document.createElement("div");
-    meta.className = "meta";
-    const parts = [];
-    if (v.year) parts.push(v.year);
-    if (Number.isFinite(v.km)) parts.push(`${fmtNumber(v.km)} km`);
-    if (v.fuel) parts.push(v.fuel);
-    if (v.gear) parts.push(v.gear);
-    meta.textContent = parts.join(" · ");
-
-    const footer = document.createElement("div");
-    footer.className = "footer";
-    const tags = document.createElement("div");
-    tags.className = "tags";
-    tags.innerHTML = `<span>Scheckheft</span> · <span>Garantie</span>`;
-    const btn = document.createElement("a");
-    btn.className = "details";
-    btn.href = v.url || "#";
-    btn.target = "_blank";
-    btn.rel = "noopener";
-    btn.textContent = "Details";
-
     footer.appendChild(tags);
     footer.appendChild(btn);
 
@@ -231,148 +300,31 @@
     body.appendChild(meta);
     body.appendChild(footer);
 
-    art.appendChild(media);
-    art.appendChild(body);
-    return art;
-  }
+    el.appendChild(media);
+    el.appendChild(body);
+    return el;
+  };
 
-  function toggleLoadMore(show) {
-    if (!els.loadMore) return;
-    els.loadMore.style.display = show ? "" : "none";
-  }
+  const renderMore = () => {
+    const next = viewCars.slice(shown, shown + PAGE);
+    next.forEach((c) => grid.appendChild(renderCard(c)));
+    shown += next.length;
+    if (moreBtn) moreBtn.style.display = shown < viewCars.length ? '' : 'none';
+    if (shown === 0) grid.innerHTML = '<div class="card">Keine Fahrzeuge gefunden.</div>';
+  };
 
   // Events
-  els.loadMore?.addEventListener("click", () => {
-    state.page += 1;
-    applyAndRender({ resetPage: false });
+  searchInput && searchInput.addEventListener('input', applyFilters);
+  fuelFilter && fuelFilter.addEventListener('change', applyFilters);
+  sortSelect && sortSelect.addEventListener('change', applyFilters);
+  resetBtn && resetBtn.addEventListener('click', () => {
+    if (searchInput) searchInput.value = '';
+    if (fuelFilter) fuelFilter.value = '';
+    if (sortSelect) sortSelect.value = 'price-asc';
+    applyFilters();
   });
-  els.search?.addEventListener("input", () => applyAndRender());
-  els.search?.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") applyAndRender();
-  });
-  els.fuel?.addEventListener("change", () => applyAndRender());
-  els.sort?.addEventListener("change", () => applyAndRender());
-  els.reset?.addEventListener("click", () => {
-    if (els.search) els.search.value = "";
-    if (els.fuel) els.fuel.value = "";
-    if (els.sort) els.sort.value = "price-asc";
-    applyAndRender();
-  });
+  moreBtn && moreBtn.addEventListener('click', renderMore);
 
-  // ------------------------------
-  // Scroll-Reveal
-  // ------------------------------
-  const io = new IntersectionObserver(
-    (entries) => {
-      for (const e of entries) {
-        if (e.isIntersecting) {
-          e.target.classList.add("is-visible");
-          if (e.target.dataset.revealOnce !== "false") io.unobserve(e.target);
-        }
-      }
-    },
-    { threshold: 0.12 }
-  );
-  const hookReveal = () => $$(".reveal").forEach((el) => io.observe(el));
-  hookReveal();
-
-  // ------------------------------
-  // Back-to-top
-  // ------------------------------
-  const backToTop = $("#backToTop");
-  window.addEventListener("scroll", () => {
-    const show = window.scrollY > 480;
-    backToTop?.classList.toggle("show", show);
-  });
-  backToTop?.addEventListener("click", () => {
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  });
-
-  // ------------------------------
-  // Theme (Dark/Light)
-  // ------------------------------
-  const root = document.documentElement;
-  const THEME_KEY = "azk-theme";
-  function applyTheme(t) {
-    root.classList.toggle("dark", t === "dark");
-    const pressed = t === "dark";
-    $("#themeToggle")?.setAttribute("aria-pressed", String(pressed));
-    $("#themeToggleMobile")?.setAttribute("aria-pressed", String(pressed));
-    $("#themeIcon") && ($("#themeIcon").textContent = pressed ? "☀️" : "🌙");
-  }
-  function getPrefTheme() {
-    return localStorage.getItem(THEME_KEY) ||
-      (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-  }
-  applyTheme(getPrefTheme());
-  $("#themeToggle")?.addEventListener("click", () => {
-    const next = root.classList.contains("dark") ? "light" : "dark";
-    localStorage.setItem(THEME_KEY, next); applyTheme(next);
-  });
-  $("#themeToggleMobile")?.addEventListener("click", () => {
-    const next = root.classList.contains("dark") ? "light" : "dark";
-    localStorage.setItem(THEME_KEY, next); applyTheme(next);
-  });
-
-  // ------------------------------
-  // Mobile-Menü
-  // ------------------------------
-  const menuBtn = $("#mobileMenuBtn");
-  const menu = $("#mobileMenu");
-  menuBtn?.addEventListener("click", () => {
-    const open = !menu.classList.contains("open");
-    menu.classList.toggle("open", open);
-    menuBtn.setAttribute("aria-expanded", String(open));
-    document.body.classList.toggle("no-scroll", open);
-  });
-
-  // ------------------------------
-  // Cookie-Banner (essentiell)
-  // ------------------------------
-  const COOKIE_KEY = "azk-consent";
-  const cookieBanner = $("#cookieBanner");
-  const hasConsent = localStorage.getItem(COOKIE_KEY);
-  if (!hasConsent) cookieBanner?.classList.add("show");
-  $("#cookieAcceptAll")?.addEventListener("click", () => acceptConsent("all"));
-  $("#cookieReject")?.addEventListener("click", () => acceptConsent("essential"));
-  $("#cookieSettingsBtn")?.addEventListener("click", () => {
-    cookieBanner?.classList.add("show");
-    window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
-  });
-  function acceptConsent(level) {
-    localStorage.setItem(COOKIE_KEY, level);
-    cookieBanner?.classList.remove("show");
-    enableDeferredScripts(level);
-  }
-  function enableDeferredScripts(level) {
-    $$('script[type="text/plain"][data-consent]').forEach((s) => {
-      const need = s.getAttribute("data-consent");
-      if (level === "all" || need === "essential") {
-        const n = document.createElement("script");
-        if (s.dataset.src) n.src = s.dataset.src;
-        n.textContent = s.textContent;
-        document.body.appendChild(n);
-      }
-    });
-  }
-  if (hasConsent) enableDeferredScripts(hasConsent);
-
-  // ------------------------------
-  // Newsletter (Demo)
-  // ------------------------------
-  $("#year") && ($("#year").textContent = new Date().getFullYear());
-  $("#newsletterForm")?.addEventListener("submit", (e) => {
-    e.preventDefault();
-    const email = $("#newsletterEmail")?.value.trim();
-    const status = $("#newsletterStatus");
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      status.textContent = "Bitte eine gültige E-Mail eingeben.";
-      return;
-    }
-    status.textContent = "Danke! Wir melden uns.";
-    e.target.reset();
-  });
-
-  // Init
-  fetchVehicles().then(hookReveal);
+  // GO
+  fetchCars();
 })();
