@@ -1,49 +1,35 @@
 <?php
-// /lib/config.php
-declare(strict_types=1);
+// dashboard/lib/config.php
+// Reads credentials from Environment Variables.
+// TEMPORARY FALLBACKS are included because your Vercel runtime isn't seeing the env vars yet.
+// Replace/remove the hardcoded fallbacks once env vars are confirmed working.
 
-/**
- * Hilfsfunktion zum sicheren Abrufen von Umgebungsvariablen.
- * @param string $key Name der Umgebungsvariable.
- * @return string|null Wert oder null, falls nicht gesetzt.
- */
-function env_or_null(string $key): ?string {
+// Helper: clean string or null
+function env_or_null($key) {
     $v = getenv($key);
-    return ($v === false || $v === '') ? null : trim($v);
+    if ($v === false || $v === '') return null;
+    return trim($v);
 }
 
-// --- API-Zugangsdaten & Konfiguration ---
-// Es wird dringend empfohlen, hierfür Vercel Environment Variables zu verwenden.
-// Die hartcodierten Fallbacks dienen der lokalen Entwicklung.
 $CONFIG = [
-    'MOBILE_USER'      => env_or_null('MOBILE_USER')      ?: 'dlr_andrekiener',
-    'MOBILE_PASSWORD'  => env_or_null('MOBILE_PASSWORD')  ?: 'T7zaurBoCaXZ',
-    'CUSTOMER_NUMBERS' => env_or_null('CUSTOMER_NUMBERS') ?: '752427',
-
-    // API-Endpunkte für mobile.de
-    'API_BASE_URL'     => 'https://services.mobile.de/search-api',
-    'API_SEARCH_PATH'  => '/search',
-    'API_DETAIL_PATH'  => '/ad/{adKey}',
-
-    // --- Caching-Konfiguration ---
-    'CACHE_TTL_SECONDS' => 300, // 5 Minuten Cache-Gültigkeit für Fahrzeugdaten
-    'VEHICLE_LIMIT'     => 60,  // Maximale Anzahl der abzurufenden Fahrzeuge
-
-    // --- Bild-Anreicherung ---
-    // Das Abrufen von Details für jedes Inserat kann langsam sein.
-    // Limitiert, für wie viele Inserate Bilder nachgeladen werden.
-    'DETAIL_ENRICH_LIMIT' => 20,
+    'MOBILE_USER'      => env_or_null('MOBILE_USER')      ?: 'dlr_andrekiener', // Fallback (remove later)
+    'MOBILE_PASSWORD'  => env_or_null('MOBILE_PASSWORD')  ?: 'T7zaurBoCaXZ',    // Fallback (remove later)
+    'CUSTOMER_NUMBERS' => env_or_null('CUSTOMER_NUMBERS') ?: '752427',          // Fallback (remove later)
 ];
 
-// --- Dateisystem-Pfade ---
-// Vercel hat ein schreibgeschütztes Dateisystem, außer im /tmp-Verzeichnis.
-// Wir erkennen die Vercel-Umgebung und passen den Speicherpfad an.
-$isVercel = env_or_null('VERCEL') || env_or_null('NOW_REGION');
-$storageBase = $isVercel
-    ? sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'azkiener_cache'
-    : __DIR__ . '/../storage';
+// Storage/Caching path (ephemeral on Vercel)
+$isReadonlyFs = !!getenv('VERCEL') || !!getenv('NOW_REGION');
+$tmp = sys_get_temp_dir();
+$storageBase = $isReadonlyFs && $tmp ? $tmp . DIRECTORY_SEPARATOR . 'azkiener' : __DIR__ . '/../storage';
 
 $CONFIG['CACHE_FILE']    = $storageBase . DIRECTORY_SEPARATOR . 'vehicles.json';
-$CONFIG['IMG_CACHE_DIR'] = $storageBase . DIRECTORY_SEPARATOR . 'img_proxy';
+$CONFIG['IMG_CACHE_DIR'] = $storageBase . DIRECTORY_SEPARATOR . 'img';
 
-return $CONFIG;
+if (!file_exists($storageBase)) { @mkdir($storageBase, 0777, true); }
+if (!file_exists($CONFIG['IMG_CACHE_DIR'])) { @mkdir($CONFIG['IMG_CACHE_DIR'], 0777, true); }
+
+// Convenience accessors
+function cfg($key, $default=null) {
+    global $CONFIG;
+    return array_key_exists($key, $CONFIG) ? $CONFIG[$key] : $default;
+}

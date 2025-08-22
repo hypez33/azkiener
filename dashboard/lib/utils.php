@@ -1,213 +1,327 @@
 <?php
-// /lib/utils.php
-declare(strict_types=1);
+// lib/utils.php — Kernlogik, HTTP, Normalisierung, Caching
+// Variante ohne Rewrite: Bild-Proxy als 'img.php?u=...'
 
-/**
- * Lädt die Konfiguration aus config.php.
- * @return array Die Konfiguration.
- */
-function cfg(): array {
-    static $config = null;
-    if ($config === null) {
-        $config = require __DIR__ . '/config.php';
+function cfg() {
+    static $cfg = null;
+    if ($cfg === null) {
+        $cfg = require __DIR__ . '/config.php';
     }
-    return $config;
+    return $cfg;
 }
 
-/**
- * Stellt sicher, dass das Cache-Verzeichnis existiert.
- */
-function ensure_storage(): void {
-    $storageDir = dirname(cfg()['CACHE_FILE']);
-    if (!is_dir($storageDir)) {
-        @mkdir($storageDir, 0777, true);
-    }
-}
-
-/**
- * Sendet eine JSON-Antwort und beendet das Skript.
- * @param mixed $data Die zu sendenden Daten.
- * @param int $code Der HTTP-Statuscode.
- */
-function json_response($data, int $code = 200): void {
-    while (ob_get_level() > 0) { ob_end_clean(); }
-    header('Content-Type: application/json; charset=utf-8');
-    http_response_code($code);
-    echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    exit;
-}
-
-/**
- * Führt eine authentifizierte GET-Anfrage an die mobile.de API durch.
- * @param string $url Die URL des Endpunkts.
- * @param array $query Optionale Query-Parameter.
- * @return array Die decodierte JSON-Antwort.
- * @throws Exception bei HTTP- oder JSON-Fehlern.
- */
-function http_basic_get_json(string $url, array $query = []): array {
+function ensure_storage() {
     $c = cfg();
+    if (!is_dir($c['STORAGE'])) @mkdir($c['STORAGE'], 0775, true);
+    if (!is_dir($c['IMG_CACHE_DIR'])) @mkdir($c['IMG_CACHE_DIR'], 0775, true);
+    if (!file_exists($c['CACHE_FILE'])) file_put_contents($c['CACHE_FILE'], json_encode(['ts'=>0,'data'=>[]]));
+}
+
+function http_get_json($url, $headers = [], $query = []) {
     if (!empty($query)) {
-        $url .= (str_contains($url, '?') ? '&' : '?') . http_build_query($query);
+        $qs = http_build_query($query);
+        $url .= (str_contains($url, '?') ? '&' : '?') . $qs;
     }
-    $ch = curl_init();
+    $ch = curl_init($url);
     curl_setopt_array($ch, [
-        CURLOPT_URL => $url,
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => 25,
         CURLOPT_FOLLOWLOCATION => true,
-        CURLOPT_HTTPAUTH => CURLAUTH_BASIC,
-        CURLOPT_USERPWD => $c['MOBILE_USER'] . ':' . $c['MOBILE_PASSWORD'],
-        CURLOPT_HTTPHEADER => [
-            'Accept: application/vnd.de.mobile.api+json',
-            'Accept-Encoding: gzip',
-            'User-Agent: AzkienerDashboard/1.2 (Vercel)'
-        ],
+        CURLOPT_CONNECTTIMEOUT => cfg()['HTTP_TIMEOUT'],
+        CURLOPT_TIMEOUT        => cfg()['HTTP_TIMEOUT'],
+        CURLOPT_HTTPHEADER     => $headers,
+        CURLOPT_SSL_VERIFYPEER => true,
+        CURLOPT_SSL_VERIFYHOST => 2,
     ]);
     $body = curl_exec($ch);
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $err = curl_error($ch);
+    if ($body === false) {
+        $err = curl_error($ch);
+        curl_close($ch);
+        throw new Exception("HTTP error: $err");
+    }
     curl_close($ch);
-    if ($body === false || $code >= 400 || $err) {
-        throw new Exception("HTTP error ($code): " . ($err ?: 'Failed to fetch data from mobile.de API'));
+    if ($code >= 400) {
+        throw new Exception("HTTP $code: ".substr($body,0,400));
     }
     $json = json_decode($body, true);
-    if ($json === null) {
-        throw new Exception("JSON decode error: " . json_last_error_msg());
+    if ($json === null && json_last_error() !== JSON_ERROR_NONE) {
+        throw new Exception("JSON decode error: ".json_last_error_msg());
     }
     return $json;
 }
 
-/**
- * Extrahiert die Inserate-Liste aus der API-Antwort.
- * @param array $root Die JSON-Antwort.
- * @return array Die Liste der Inserate.
- */
-function extract_ads(array $root): array {
-    return $root['searchResult']['ads'] ?? $root['ads'] ?? [];
+function auth_headers() {
+    $c = cfg();
+    $auth = base64_encode($c['MOBILE_USER'].':'.$c['MOBILE_PASSWORD']);
+    return [
+        'Authorization: Basic '.$auth,
+        'Accept: '.$c['ACCEPT'],
+        'User-Agent: ak-mobile-php/1.0'
+    ];
 }
 
-/**
- * Extrahiert die beste Bild-URL aus einem Inserat-Detailobjekt.
- * @param array $ad Das Inserat-Objekt.
- * @return string|null Die gefundene URL oder null.
- */
-function image_from_detail(array $ad): ?string {
-    $pick_variant = function (array $arr): ?string {
-        foreach (['xxxl', 'xxl', 'xl', 'l', 'm', 's', 'url'] as $k) {
-            if (!empty($arr[$k]) && is_string($arr[$k]) && str_starts_with($arr[$k], 'http')) return $arr[$k];
-        }
-        if (isset($arr['representation']) && is_array($arr['representation'])) {
-            $order = ['XXXL', 'XXL', 'XL', 'L', 'M', 'S'];
-            $reps = array_column($arr['representation'], 'url', 'size');
-            foreach ($order as $size) if (!empty($reps[$size])) return $reps[$size];
-        }
-        return null;
-    };
-    if (!empty($ad['images']) && is_array($ad['images'])) {
-        foreach ($ad['images'] as $item) {
-            if (is_array($item) && ($u = $pick_variant($item))) return $u;
-            if (is_string($item) && str_starts_with($item, 'http')) return $item;
+function extract_ads($root) {
+    if (is_array($root)) {
+        if (array_is_list($root)) {
+            return $root;
+        } else {
+            if (isset($root['ads']) && is_array($root['ads'])) return $root['ads'];
+            if (isset($root['searchResult']['ads']) && is_array($root['searchResult']['ads'])) return $root['searchResult']['ads'];
+            foreach ($root as $k=>$v) {
+                if (is_string($k) && strtolower($k)==='ads' && is_array($v)) return $v;
+            }
         }
     }
-    return null;
+    return [];
 }
 
-/**
- * Normalisiert ein Inserat in das vom Frontend erwartete Format.
- * @param array $ad Das Roh-Inserat von der API.
- * @return array Das normalisierte Inserat.
- */
-function normalize_ad(array $ad): array {
-    $priceAmount = $ad['price']['consumerPriceGross'] ?? $ad['price']['consumerPrice']['amount'] ?? 0.0;
-    $km = (int)($ad['mileageInKm'] ?? $ad['mileage'] ?? 0);
-    $fuel = $ad['fuel'] ?? "";
-    $gearbox = strtolower($ad['gearbox'] ?? $ad['transmission'] ?? '');
-    $gearLabel = (str_contains($gearbox, 'auto') || str_contains($gearbox, 'dsg')) ? 'Automatic_gear' : 'Manual_gear';
-    preg_match('/^(\d{4})/', $ad['firstRegistration'] ?? '', $matches);
-    $year = (int)($matches[1] ?? 0);
+function pick_variant_url($arr) {
+    foreach (['xxxl','xxl','xl','l','m','s','icon','url','href','src','originalUrl'] as $k) {
+        if (isset($arr[$k]) && is_string($arr[$k]) && preg_match('~^https?://~i', $arr[$k])) {
+            return $arr[$k];
+        }
+    }
+    return '';
+}
+
+function image_from_detail($ad) {
+    if (isset($ad['images']) && is_array($ad['images']) && array_is_list($ad['images'])) {
+        foreach ($ad['images'] as $item) {
+            if (is_array($item)) {
+                $u = pick_variant_url($item);
+                if ($u) return $u;
+            } elseif (is_string($item) && preg_match('~^https?://~i', $item)) {
+                return $item;
+            }
+        }
+    }
+    if (isset($ad['images']) && is_array($ad['images']) && !array_is_list($ad['images'])) {
+        $lst = $ad['images']['images'] ?? ($ad['images']['image'] ?? []);
+        if (!is_array($lst)) $lst = [$lst];
+        foreach ($lst as $item) {
+            if (is_array($item)) {
+                $u = pick_variant_url($item);
+                if ($u) return $u;
+            } elseif (is_string($item) && preg_match('~^https?://~i', $item)) {
+                return $item;
+            }
+        }
+    }
+    if (isset($ad['media']) && is_array($ad['media'])) {
+        foreach (['images','image','thumbnails','representations'] as $key) {
+            $arr = $ad['media'][$key] ?? null;
+            if (!$arr) continue;
+            if (!is_array($arr)) $arr = [$arr];
+            foreach ($arr as $item) {
+                if (is_array($item)) {
+                    $u = pick_variant_url($item);
+                    if ($u) return $u;
+                } elseif (is_string($item) && preg_match('~^https?://~i', $item)) {
+                    return $item;
+                }
+            }
+        }
+    }
+    if (isset($ad['resources']['images']) && is_array($ad['resources']['images'])) {
+        $arr = $ad['resources']['images'];
+        if (!is_array($arr)) $arr = [$arr];
+        foreach ($arr as $item) {
+            if (is_array($item)) {
+                $u = pick_variant_url($item);
+                if ($u) return $u;
+            }
+        }
+    }
+    foreach (['imageUrl','thumbnailUrl','thumbUrl','pictureUrl','photoUrl'] as $k) {
+        if (!empty($ad[$k]) && preg_match('~^https?://~i', $ad[$k])) return $ad[$k];
+    }
+    $stack = [$ad]; $depth = 0;
+    while ($stack && $depth < 6) {
+        $next = [];
+        foreach ($stack as $node) {
+            if (is_array($node)) {
+                foreach ($node as $k=>$v) {
+                    if (is_string($v) && preg_match('~^https?://~i', $v) && preg_match('~(img|image|photo|thumb|media|repres)~i', (string)$k)) {
+                        return $v;
+                    }
+                    if (is_array($v)) $next[] = $v;
+                }
+            }
+        }
+        $stack = $next; $depth++;
+    }
+    return '';
+}
+
+function nf_eur($val) {
+    return number_format((int)$val, 0, ',', '.') . ' €';
+}
+
+function parse_price_value($price) {
+    // mobile.de kann verschiedene Formen liefern; wir probieren mehrere:
+    // Beispiele:
+    // 1) price: { gross: 19900 }
+    // 2) price: { gross: { amount: 19900 } }
+    // 3) price: { amount: 19900 }
+    // 4) price: 19900
+    // 5) price: { consumerPriceGross: 19900 } (Fallback)
+    if (!is_array($price)) {
+        if (is_numeric($price)) return (int)$price;
+        return 0;
+    }
+    if (isset($price['gross'])) {
+        if (is_numeric($price['gross'])) return (int)$price['gross'];
+        if (is_array($price['gross']) && isset($price['gross']['amount']) && is_numeric($price['gross']['amount']))
+            return (int)$price['gross']['amount'];
+    }
+    if (isset($price['amount']) && is_numeric($price['amount'])) return (int)$price['amount'];
+    if (isset($price['consumerPriceGross']) && is_numeric($price['consumerPriceGross'])) return (int)$price['consumerPriceGross'];
+    // weitere Fallbacks
+    foreach (['value','total','brutto','net'] as $k) {
+        if (isset($price[$k]) && is_numeric($price[$k])) return (int)$price[$k];
+    }
+    return 0;
+}
+
+function normalize_ad($ad) {
+    if (isset($ad['ad']) && is_array($ad['ad'])) $ad = $ad['ad'];
+
+    $adId      = $ad['mobileAdId'] ?? ($ad['id'] ?? ($ad['adKey'] ?? null));
+    $detailUrl = $ad['detailPageUrl'] ?? ($ad['adUrl'] ?? ($ad['url'] ?? '#'));
+
+    $specifics = $ad['specifics'] ?? [];
+    $tech      = $specifics['technical'] ?? [];
+
+    $make   = $ad['make'] ?? '';
+    $model  = $ad['model'] ?? '';
+    $variant= $ad['modelDescription'] ?? ($ad['variant'] ?? '');
+    $title  = trim(implode(' ', array_filter([$make,$model,$variant]))) ?: ($ad['title'] ?? 'Fahrzeug');
+
+    $mileage = $specifics['mileage'] ?? ($ad['mileage'] ?? 0);
+    $firstReg= $specifics['firstRegistrationDate'] ?? ($ad['firstRegistrationDate'] ?? null);
+    $year    = $firstReg ? intval(substr((string)$firstReg,0,4)) : 0;
+
+    $fuel    = $tech['fuel'] ?? ($ad['fuel'] ?? '');
+    $gearbox = $tech['gearbox'] ?? ($ad['gearbox'] ?? '');
+    $powerKW = $tech['power'] ?? ($ad['powerKW'] ?? null);
+
+    $specs = [];
+    if ($year) $specs[] = (string)$year;
+    if ($mileage) $specs[] = number_format((int)$mileage, 0, ',', '.') . ' km';
+    if ($fuel) $specs[] = ucfirst(strtolower((string)$fuel));
+    if ($gearbox) $specs[] = ucfirst(strtolower((string)$gearbox));
+    if ($powerKW) {
+        $kw = floatval($powerKW); $ps = intval(round($kw * 1.35962));
+        $specs[] = intval($kw) . " kW ($ps PS)";
+    }
+
+    $priceBlock = $ad['price'] ?? [];
+    $pval = parse_price_value($priceBlock);
+    $plabel = $pval > 0 ? nf_eur($pval) : 'Preis auf Anfrage';
+
     return [
-        'adId'       => (string)($ad['mobileAdId'] ?? $ad['id'] ?? null),
-        'url'        => $ad['detailPageUrl'] ?? '#',
-        'title'      => $ad['title'] ?? trim(($ad['make'] ?? '') . ' ' . ($ad['model'] ?? '')),
-        'price'      => (int)$priceAmount,
-        'priceLabel' => $priceAmount > 0 ? number_format($priceAmount, 0, ',', '.') . ' €' : 'Preis auf Anfrage',
-        'specs'      => number_format($km, 0, ',', '.') . ' km · ' . $fuel . ' · ' . $gearLabel,
-        'fuel'       => $fuel,
-        'km'         => $km,
+        'adId'       => $adId,
+        'url'        => $detailUrl,
+        'title'      => $title,
+        'price'      => $pval,
+        'priceLabel' => $plabel,
+        'specs'      => implode(' · ', $specs),
+        'fuel'       => $fuel ? ucfirst(strtolower($fuel)) : '',
+        'km'         => $mileage ? (int)$mileage : 0,
         'year'       => $year,
         'img'        => '',
     ];
 }
 
-/**
- * Ruft die Fahrzeugliste von der API ab.
- * @return array Die Liste der normalisierten Fahrzeuge.
- * @throws Exception bei API-Fehlern.
- */
-function fetch_inventory(): array {
+function fetch_inventory() {
     $c = cfg();
     $params = [
         'customerNumber' => $c['CUSTOMER_NUMBERS'],
-        'page.size'      => 100,
+        'page.size'      => '100',
         'sort.field'     => 'modificationTime',
         'sort.order'     => 'DESCENDING',
         'country'        => 'DE',
     ];
-    $items = [];
-    $limit = $c['VEHICLE_LIMIT'];
-    $data = http_basic_get_json($c['API_BASE_URL'] . $c['API_SEARCH_PATH'], $params);
+    $data = http_get_json($c['BASE_URL'], auth_headers(), $params);
     $ads  = extract_ads($data);
+
+    $out = [];
     foreach ($ads as $ad) {
-        if (count($items) >= $limit) break;
-        $items[] = normalize_ad($ad);
+        if (isset($ad['ad']) && is_array($ad['ad'])) $ad = $ad['ad'];
+        $out[] = normalize_ad($ad);
     }
-    return $items;
+    return $out;
 }
 
-/**
- * Reichet eine Liste von Fahrzeugen mit Bildern aus der Detail-API an.
- * @param array $items Die Fahrzeugliste (wird per Referenz modifiziert).
- */
-function enrich_images(array &$items): void {
+function fetch_ad_detail($adKey) {
     $c = cfg();
+    $url = str_replace('{adKey}', urlencode($adKey), $c['DETAIL_URL']);
+    return http_get_json($url, auth_headers());
+}
+
+function enrich_images(&$items) {
+    $c = cfg();
+    if (!$c['DETAIL_ENRICH']) return;
+
     $count = 0;
     foreach ($items as &$v) {
-        if ($count >= $c['DETAIL_ENRICH_LIMIT'] || empty($v['adId'])) continue;
+        if (!empty($v['img'])) continue;
+        $adId = $v['adId'] ?? null;
+        if (!$adId) continue;
+
         try {
-            $url = $c['API_BASE_URL'] . str_replace('{adKey}', urlencode($v['adId']), $c['API_DETAIL_PATH']);
-            $detail = http_basic_get_json($url);
-            if ($img = image_from_detail($detail)) {
-                $v['img'] = 'img.php?u=' . urlencode($img);
+            $detail = fetch_ad_detail($adId);
+            $ad = isset($detail['ad']) && is_array($detail['ad']) ? $detail['ad'] : $detail;
+            $img = image_from_detail($ad);
+            if ($img) {
+                // *** Ohne Rewrite: IMMER 'img.php?u=' nutzen ***
+                if ($c['PROXY_IMAGES'] && preg_match('~^https?://~i', $img)) {
+                    $v['img'] = 'img.php?u=' . urlencode($img); // KEIN führender Slash!
+                } else {
+                    $v['img'] = $img;
+                }
             }
-        } catch (Exception) { /* Ignoriere Fehler bei einzelnen Abrufen */ }
+        } catch (Exception $e) {
+            // still weiter
+        }
+
         $count++;
+        if ($count >= $c['DETAIL_LIMIT']) break;
     }
 }
 
-/**
- * Holt die Fahrzeugliste aus dem Cache oder von der API.
- * @param bool $force Wenn true, wird der Cache ignoriert.
- * @return array Die Daten im Format {ts, data}.
- */
-function get_inventory_cached(bool $force = false): array {
+function read_cache() {
+    $c = cfg();
+    if (!file_exists($c['CACHE_FILE'])) return ['ts'=>0,'data'=>[]];
+    $raw = file_get_contents($c['CACHE_FILE']);
+    $json = json_decode($raw, true);
+    return is_array($json) ? $json : ['ts'=>0,'data'=>[]];
+}
+
+function write_cache($data) {
+    $c = cfg();
+    $payload = ['ts'=>time(),'data'=>$data];
+    file_put_contents($c['CACHE_FILE'], json_encode($payload, JSON_UNESCAPED_SLASHES));
+    return $payload;
+}
+
+function get_inventory_cached($force=false) {
     ensure_storage();
     $c = cfg();
-    $cacheFile = $c['CACHE_FILE'];
-    if (!$force && file_exists($cacheFile)) {
-        $cache = json_decode(@file_get_contents($cacheFile), true);
-        if ($cache && (time() - $cache['ts']) < $c['CACHE_TTL_SECONDS']) {
-            return $cache;
-        }
+    $cache = read_cache();
+    $age = time() - ($cache['ts'] ?? 0);
+
+    if (!$force && $age < $c['CACHE_TTL_SECONDS'] && !empty($cache['data'])) {
+        return $cache;
     }
-    try {
-        $items = fetch_inventory();
-        enrich_images($items);
-        $payload = ['ts' => time(), 'data' => $items];
-        @file_put_contents($cacheFile, json_encode($payload), LOCK_EX);
-        return $payload;
-    } catch (Exception $e) {
-        // Bei Fehler: veralteten Cache zurückgeben, falls vorhanden
-        if (isset($cache) && !empty($cache['data'])) return $cache;
-        return ['ts' => time(), 'data' => [], 'error' => $e->getMessage()];
-    }
+    $items = fetch_inventory();
+    enrich_images($items);
+    return write_cache($items);
+}
+
+function json_response($data, $code=200) {
+    header('Content-Type: application/json; charset=utf-8');
+    http_response_code($code);
+    echo json_encode($data, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+    exit;
 }
