@@ -1,77 +1,70 @@
 <?php
-// dashboard/img.php
-// Lightweight image proxy with ephemeral caching for Vercel.
-// Usage: /img.php?src=<url-encoded-absolute-url>&ttl=3600
-// Optional: &referer=<referer-header>, &ua=<user-agent>
-// NOTE: No resizing server-side (GD/Imagick may not be available in serverless).
-
+// /api/img.php
+// Ein leichtgewichtiger Bild-Proxy mit Caching für Vercel.
+// Verwendung: /api/img.php?u=<URL-codierte-absolute-Bild-URL>
 declare(strict_types=1);
+
 header_remove('X-Powered-By');
 
-// Validate & normalize input
-$src = isset($_GET['src']) ? trim((string)$_GET['src']) : '';
-if ($src === '' || !preg_match('~^https?://~i', $src)) {
+// Parameter 'u' für Kompatibilität mit dem bestehenden Frontend-Code.
+$src = trim($_GET['u'] ?? '');
+
+if (!filter_var($src, FILTER_VALIDATE_URL)) {
   http_response_code(400);
   header('Content-Type: application/json; charset=utf-8');
-  echo json_encode(['error' => 'Missing or invalid src URL']);
+  echo json_encode(['error' => 'Missing or invalid URL parameter "u"']);
   exit;
 }
 
-$ttl = isset($_GET['ttl']) ? max(60, (int)$_GET['ttl']) : 3600; // default 1h
-$cacheDir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'azkiener_img';
+$ttl = 86400; // Bilder für 24 Stunden zwischenspeichern
+$cacheDir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'azkiener_img_cache';
 if (!is_dir($cacheDir)) { @mkdir($cacheDir, 0777, true); }
+
 $cacheKey = md5($src);
 $cachePath = $cacheDir . DIRECTORY_SEPARATOR . $cacheKey;
+$metaPath = $cachePath . '.json';
 
-// Serve from cache if fresh
-if (file_exists($cachePath)) {
-  $age = time() - filemtime($cachePath);
-  if ($age <= $ttl) {
-    // Read headers file if present
-    $meta = @json_decode(@file_get_contents($cachePath . '.json'), true);
-    if (isset($meta['content_type'])) {
-      header('Content-Type: ' . $meta['content_type']);
-    } else {
-      header('Content-Type: image/jpeg'); // fallback
-    }
-    header('Cache-Control: public, max-age=300, s-maxage=600, stale-while-revalidate=1200');
+// Aus dem Cache bereitstellen, wenn frisch
+if (file_exists($cachePath) && (time() - filemtime($cachePath)) <= $ttl) {
+    $meta = @json_decode(@file_get_contents($metaPath), true);
+    header('Content-Type: ' . ($meta['content_type'] ?? 'image/jpeg'));
+    header('Cache-Control: public, max-age=' . $ttl);
+    header('X-Image-Cache: hit');
     readfile($cachePath);
     exit;
-  }
 }
 
-// Fetch upstream
+// Bild von der Originalquelle abrufen
 $ch = curl_init();
-$headers = ['Accept: image/*,*/*;q=0.8'];
-if (isset($_GET['referer'])) $headers[] = 'Referer: ' . $_GET['referer'];
-$ua = isset($_GET['ua']) ? (string)$_GET['ua'] : 'azkiener-img-proxy/1.0';
 curl_setopt_array($ch, [
   CURLOPT_URL => $src,
   CURLOPT_RETURNTRANSFER => true,
   CURLOPT_FOLLOWLOCATION => true,
-  CURLOPT_MAXREDIRS => 4,
-  CURLOPT_TIMEOUT => 15,
-  CURLOPT_HTTPHEADER => $headers,
-  CURLOPT_USERAGENT => $ua,
+  CURLOPT_MAXREDIRS => 5,
+  CURLOPT_TIMEOUT => 20,
+  CURLOPT_HTTPHEADER => ['Accept: image/*'],
+  CURLOPT_USERAGENT => 'AzkienerImageProxy/1.2 (Vercel)',
 ]);
+
 $body = curl_exec($ch);
-$err  = curl_error($ch);
 $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
 $contentType = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+$err = curl_error($ch);
 curl_close($ch);
 
 if ($err || $code >= 400 || !$body) {
-  http_response_code(502);
+  http_response_code(502); // Bad Gateway
   header('Content-Type: application/json; charset=utf-8');
-  echo json_encode(['error' => 'Upstream fetch failed', 'code' => $code, 'detail' => $err]);
+  echo json_encode(['error' => 'Upstream image fetch failed', 'code' => $code, 'detail' => $err]);
   exit;
 }
 
-// Persist to cache (best-effort)
+// Im Cache speichern
 @file_put_contents($cachePath, $body, LOCK_EX);
-@file_put_contents($cachePath . '.json', json_encode(['content_type' => $contentType ?: 'image/jpeg']), LOCK_EX);
+@file_put_contents($metaPath, json_encode(['content_type' => $contentType]), LOCK_EX);
 
-// Serve
+// An den Client ausliefern
 header('Content-Type: ' . ($contentType ?: 'image/jpeg'));
-header('Cache-Control: public, max-age=300, s-maxage=600, stale-while-revalidate=1200');
+header('Cache-Control: public, max-age=600');
+header('X-Image-Cache: miss');
 echo $body;
