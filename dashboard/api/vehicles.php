@@ -68,31 +68,58 @@ function first_year_from($val): int {
   return 0;
 }
 
-function pick_image_url_from_ad(array $ad): ?string {
-  if (isset($ad['images']['image']) && is_array($ad['images']['image'])) {
-    foreach ($ad['images']['image'] as $img) {
-      if (isset($img['representation']) && is_array($img['representation'])) {
-        $pref = ['XL','XXL','L','M','S','ICON'];
-        $bySize = [];
-        foreach ($img['representation'] as $rep) {
-          $size = strtoupper($rep['size'] ?? '');
-          $url  = $rep['url'] ?? null;
-          if ($size && $url) $bySize[$size] = $url;
-        }
-        foreach ($pref as $p) if (!empty($bySize[$p])) return $bySize[$p];
-      }
-      foreach (['xl','xxl','l','m','s','icon'] as $k) {
-        if (!empty($img[$k])) return $img[$k];
-      }
-      if (!empty($img['url'])) return $img['url'];
+/* Robust image extraction (mirrors user's working utils.php) */
+function pick_variant_url($arr) {
+  foreach (['xxxl','xxl','xl','l','m','s','icon','url','href','src','originalUrl'] as $k) {
+    if (isset($arr[$k]) && is_string($arr[$k]) && preg_match('~^https?://~i', $arr[$k])) {
+      return $arr[$k];
     }
   }
+  // Also handle representation[size] = url objects
+  if (isset($arr['representation']) && is_array($arr['representation'])) {
+    $pref = ['XXXL','XXL','XL','L','M','S','ICON'];
+    $by = [];
+    foreach ($arr['representation'] as $rep) {
+      $size = strtoupper($rep['size'] ?? '');
+      $url  = $rep['url'] ?? null;
+      if ($size && $url) $by[$size] = $url;
+    }
+    foreach ($pref as $p) if (!empty($by[$p])) return $by[$p];
+  }
+  return '';
+}
+function image_from_detail($ad) {
+  // 1) images: [ {xxxl|xxl|xl|...|url}, ... ] or strings
   if (isset($ad['images']) && is_array($ad['images'])) {
-    foreach ($ad['images'] as $img) {
-      foreach (['xl','xxl','l','m','s','icon','url'] as $k) {
-        if (!empty($img[$k])) return $img[$k];
+    $arr = $ad['images'];
+    foreach ($arr as $item) {
+      if (is_array($item)) { $u = pick_variant_url($item); if ($u) return $u; }
+      elseif (is_string($item) && preg_match('~^https?://~i', $item)) { return $item; }
+    }
+  }
+  // 2) media: { images|image|thumbnails|representations: [...] }
+  if (isset($ad['media']) && is_array($ad['media'])) {
+    foreach (['images','image','thumbnails','representations'] as $key) {
+      $arr = $ad['media'][$key] ?? null;
+      if (!$arr) continue;
+      if (!is_array($arr)) $arr = [$arr];
+      foreach ($arr as $item) {
+        if (is_array($item)) { $u = pick_variant_url($item); if ($u) return $u; }
+        elseif (is_string($item) && preg_match('~^https?://~i', $item)) { return $item; }
       }
     }
+  }
+  // 3) resources.images: [ {xxl|...|url} ]
+  if (isset($ad['resources']['images']) && is_array($ad['resources']['images'])) {
+    $arr = $ad['resources']['images'];
+    if (!is_array($arr)) $arr = [$arr];
+    foreach ($arr as $item) {
+      if (is_array($item)) { $u = pick_variant_url($item); if ($u) return $u; }
+    }
+  }
+  // 4) common single fields
+  foreach (['imageUrl','thumbnailUrl','thumbUrl','pictureUrl','photoUrl'] as $k) {
+    if (!empty($ad[$k]) && is_string($ad[$k]) && preg_match('~^https?://~i', $ad[$k])) return $ad[$k];
   }
   return null;
 }
@@ -117,6 +144,7 @@ if (!$force) {
   if ($cached!==null) finish_json($cached, 200);
 }
 
+/* 1) Search → build items quickly */
 $items = [];
 $page = 1; $maxPages = 30;
 while ($page <= $maxPages && count($items) < $limit) {
@@ -145,7 +173,7 @@ while ($page <= $maxPages && count($items) < $limit) {
       "fuel"       => $fuel,
       "km"         => $km,
       "year"       => $year,
-      "img"        => ""
+      "img"        => "" // fill via details if necessary
     ];
     if (count($items) >= $limit) break;
   }
@@ -155,6 +183,7 @@ while ($page <= $maxPages && count($items) < $limit) {
   $page = $current + 1;
 }
 
+/* 2) Enrich missing price/image via detail */
 foreach ($items as &$it) {
   if ($it["price"]>0 && $it["img"]!=="") continue;
   $key = null;
@@ -172,12 +201,13 @@ foreach ($items as &$it) {
     if ($pa!==null){ $it["price"]=(int)$pa; $it["priceLabel"]=fmt_price_label($pa); }
   }
   if ($it["img"]==="") {
-    $imgUrl = pick_image_url_from_ad($ad);
-    if ($imgUrl) $it["img"] = 'img.php?u=' . rawurlencode($imgUrl); // <— legacy param
+    $imgUrl = image_from_detail($ad);
+    if ($imgUrl) $it["img"] = 'img.php?u=' . rawurlencode($imgUrl); // legacy param for maximum compatibility
   }
 }
 unset($it);
 
+/* 3) Output legacy schema */
 $result = ["ts"=>time(), "data"=>$items];
 cache_set($cacheKey, $result);
 finish_json($result, 200);
