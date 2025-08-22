@@ -5,13 +5,15 @@
     }
   },
   "rewrites": [
+    { "source": "/img.php", "destination": "/api/img.php" },
+    { "source": "/api/(.*)", "destination": "/api/$1" }
+  ],
+  "headers": [
     {
       "source": "/img.php",
-      "destination": "/api/img.php"
-    },
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/$1"
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=300, s-maxage=300, stale-while-revalidate=600" }
+      ]
     }
   ]
 }
