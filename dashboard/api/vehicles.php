@@ -68,7 +68,6 @@ function first_year_from($val): int {
   return 0;
 }
 
-/* choose best image URL from mobile.de structures */
 function pick_image_url_from_ad(array $ad): ?string {
   if (isset($ad['images']['image']) && is_array($ad['images']['image'])) {
     foreach ($ad['images']['image'] as $img) {
@@ -118,7 +117,6 @@ if (!$force) {
   if ($cached!==null) finish_json($cached, 200);
 }
 
-/* 1) Search → build items quickly */
 $items = [];
 $page = 1; $maxPages = 30;
 while ($page <= $maxPages && count($items) < $limit) {
@@ -147,7 +145,7 @@ while ($page <= $maxPages && count($items) < $limit) {
       "fuel"       => $fuel,
       "km"         => $km,
       "year"       => $year,
-      "img"        => "" // fill via details if necessary
+      "img"        => ""
     ];
     if (count($items) >= $limit) break;
   }
@@ -157,7 +155,6 @@ while ($page <= $maxPages && count($items) < $limit) {
   $page = $current + 1;
 }
 
-/* 2) Enrich missing price/image via detail */
 foreach ($items as &$it) {
   if ($it["price"]>0 && $it["img"]!=="") continue;
   $key = null;
@@ -176,12 +173,11 @@ foreach ($items as &$it) {
   }
   if ($it["img"]==="") {
     $imgUrl = pick_image_url_from_ad($ad);
-    if ($imgUrl) $it["img"] = '/img.php?src=' . rawurlencode($imgUrl);
+    if ($imgUrl) $it["img"] = 'img.php?u=' . rawurlencode($imgUrl); // <— legacy param
   }
 }
 unset($it);
 
-/* 3) Output legacy schema */
 $result = ["ts"=>time(), "data"=>$items];
 cache_set($cacheKey, $result);
 finish_json($result, 200);
