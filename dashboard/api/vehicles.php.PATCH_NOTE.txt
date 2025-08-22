@@ -1,0 +1,3 @@
+// In dashboard/api/vehicles.php ensure the image path uses an ABSOLUTE API path:
+//   $it["img"] = '/api/img.php?src=' . rawurlencode($imgUrl);   // or '?u=' depending on your generator
+// This avoids rewrite issues on Vercel.
