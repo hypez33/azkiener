@@ -202,7 +202,10 @@ foreach ($items as &$it) {
   }
   if ($it["img"]==="") {
     $imgUrl = image_from_detail($ad);
-    if ($imgUrl) $it["img"] = '/img.php?u=' . rawurlencode($imgUrl); // legacy param for maximum compatibility
+    if ($imgUrl) {
+      // Use absolute API path to avoid rewrite issues on deployment platforms
+      $it["img"] = '/api/img.php?src=' . rawurlencode($imgUrl);
+    }
   }
 }
 unset($it);
