@@ -4,7 +4,14 @@
   --muted:#6b7280;
   --ring: 0 0 0 3px rgba(237,128,77,.35);
 }
-.dark { color-scheme: dark; }
+.dark {
+  color-scheme: dark;
+  --brand:#ff8a50;
+  --text:#e8edf4;
+  --muted:#9aa4b2;
+  --bg:#0d1117;
+  --card:#131a23;
+}
 
 /* --- global --- */
 :focus-visible { outline: none; box-shadow: var(--ring); border-radius:.6rem; }
@@ -144,25 +151,25 @@
 .menu-panel.open { max-height:420px; opacity:1; }
 
 /* --- Dark Mode --- */
-.dark body { background:#0b0f14; color:#e8edf4; }
-.dark .bg-gray-50{ background:#0f141a !important; }
-.dark .text-gray-600{ color:#9ca3af !important; }
+.dark body { background:var(--bg); color:var(--text); }
+.dark .bg-gray-50{ background:var(--card) !important; }
+.dark .text-gray-600{ color:var(--muted) !important; }
 .dark .text-gray-500{ color:#b8c4d6 !important; }
 .dark .border{ border-color:#223042 !important; }
 
-.dark .input { background:#0f141a; border-color:#2a3a4f; color:#e8edf4; }
+.dark .input { background:var(--card); border-color:#2a3a4f; color:var(--text); }
 .dark .btn-primary { background: var(--brand); color: #111; }
-.dark .btn-outline { border-color:#2a3a4f; color:#dbe5f1; }
-.dark .btn-icon { border-color:#2a3a4f; color:#eaf1fb; }
-.dark .link { color:#eaf1fb; }
-.dark .nav-link { color:#eaf1fb; }
+.dark .btn-outline { border-color:#2a3a4f; color:var(--text); }
+.dark .btn-icon { border-color:#2a3a4f; color:var(--text); }
+.dark .link { color:var(--text); }
+.dark .nav-link { color:var(--text); }
 .dark .nav-link:hover { color:#ffd9c7; }
-.dark header { background:rgba(11,15,20,.88) !important; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.dark header { background:rgba(13,17,23,.88) !important; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
 
-.dark .card, .dark .back-to-top, .dark .cookie-banner { background:#0f141a; border-color:#263346; color:#e8edf4; }
-.dark .vehicle-card { background:#0f141a; border-color:#263346; }
-.dark .vehicle-card .meta { color:#9aa4b2; }
-.dark .vehicle-card .details { border-color:#ed804d; color:#ffd9c7; }
+.dark .card, .dark .back-to-top, .dark .cookie-banner { background:var(--card); border-color:#263346; color:var(--text); }
+.dark .vehicle-card { background:var(--card); border-color:#263346; }
+.dark .vehicle-card .meta { color:var(--muted); }
+.dark .vehicle-card .details { border-color:var(--brand); color:#ffd9c7; }
 .dark .badge { background: rgba(237,128,77,.18); color:#ffd9c7; border-color: rgba(237,128,77,.35); }
 
 /* Cookie Modal (falls später benötigt) */

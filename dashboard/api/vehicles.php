@@ -124,11 +124,12 @@ function image_from_detail($ad) {
   return null;
 }
 
-$user = getenv('MOBILE_USER') ?: '';
-$pass = getenv('MOBILE_PASSWORD') ?: '';
-$cust = getenv('CUSTOMER_NUMBERS') ?: '';
+$env = fn(string $k): string => getenv($k) ?: ($_ENV[$k] ?? ($_SERVER[$k] ?? ''));
+$user = $env('MOBILE_USER');
+$pass = $env('MOBILE_PASSWORD');
+$cust = $env('CUSTOMER_NUMBERS');
 if ($user==='' || $pass==='' || $cust==='') {
-  finish_json(["ts"=>time(),"data"=>[]], 200);
+  finish_json(["ts"=>time(),"data"=>[],"error"=>"missing_credentials"], 200);
 }
 
 $ttl   = isset($_GET['ttl']) ? max(30, (int)$_GET['ttl']) : 300;
@@ -146,10 +147,10 @@ if (!$force) {
 
 /* 1) Search → build items quickly */
 $items = [];
-$page = 1; $maxPages = 30;
+$page = 1; $maxPages = 30; $lastError = null;
 while ($page <= $maxPages && count($items) < $limit) {
   [$j,$e] = http_basic_get_json($base . '/search?' . $query . '&page.number=' . $page, $user, $pass);
-  if ($e) break;
+  if ($e) { $lastError = $e; break; }
   $sr  = $j['searchResult'] ?? null;
   $ads = is_array($sr) ? ($sr['ads'] ?? []) : ($j['ads'] ?? []);
   if (!is_array($ads) || !count($ads)) break;
@@ -212,5 +213,10 @@ unset($it);
 
 /* 3) Output legacy schema */
 $result = ["ts"=>time(), "data"=>$items];
-cache_set($cacheKey, $result);
+if ($lastError && !count($items)) {
+  $result['error'] = $lastError;
+}
+if (!$lastError) {
+  cache_set($cacheKey, $result);
+}
 finish_json($result, 200);
