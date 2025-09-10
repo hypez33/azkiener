@@ -53,6 +53,11 @@
   };
   const storedTheme = localStorage.getItem('azk_theme');
   applyTheme(storedTheme || 'light');
+  const initPressed = root.classList.contains('dark');
+  const initIcon = $('#themeIcon');
+  if (initIcon) initIcon.textContent = initPressed ? '☀️' : '🌙';
+  $('#themeToggle')?.setAttribute('aria-pressed', String(initPressed));
+  $('#themeToggleMobile')?.setAttribute('aria-pressed', String(initPressed));
 
   const setupThemeToggle = (btn) => {
     if (!btn) return;
@@ -192,6 +197,7 @@
     try {
       const res = await fetch('/api/vehicles.php?limit=60', { cache: 'no-store' });
       const json = await res.json();
+      if (json?.error) throw json.error;
       const arr = Array.isArray(json?.data) ? json.data : [];
       // Normalize
       allCars = arr.map((c) => ({
