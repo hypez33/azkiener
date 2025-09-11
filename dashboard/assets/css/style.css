@@ -70,6 +70,14 @@
 .cookie-banner .container { max-width:72rem; margin:0 auto; display:flex; gap:1rem; align-items:center; justify-content:space-between; }
 .cookie-banner .actions { display:flex; gap:.5rem; }
 
+/* Hintergrund-Gradient für Hero */
+.hero-gradient {
+  background: radial-gradient(1000px 600px at 80% -10%, #ffe5dc, transparent);
+}
+.dark .hero-gradient {
+  background: radial-gradient(1000px 600px at 80% -10%, #fde7dd, transparent);
+}
+
 /* ---------------------------------------------
    VEHICLE CARD
    --------------------------------------------- */
